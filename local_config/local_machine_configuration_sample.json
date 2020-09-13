@@ -1,0 +1,6 @@
+{
+    "trans-host": "your_transmission_ip, ex) 192.168.0.1",
+    "trans-id": "your_id",
+    "trans-port": "your_transmission_ip, ex) 9091",
+    "trans-pw": "your_pw"
+}
