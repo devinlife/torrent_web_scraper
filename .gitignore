@@ -109,4 +109,5 @@ venv.bak/
 
 # local settings
 local_config/local_machine_configuration.json
+local_config/program_list.py
 local_config/magnet_history.csv
