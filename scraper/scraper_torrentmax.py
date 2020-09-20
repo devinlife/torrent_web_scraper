@@ -2,9 +2,9 @@ from scraper.scraper import ScraperTemplate
 import re
 
 class ScraperTorrentmax(ScraperTemplate):
-    def __init__(self, scraper_configuration_file, local_machine_status_file):
+    def __init__(self, scraper_configuration_file, local_machine_status_file, local_machine_history_file):
         site_name = 'torrentmax'
-        super().__init__(site_name, scraper_configuration_file, local_machine_status_file)
+        super().__init__(site_name, scraper_configuration_file, local_machine_status_file, local_machine_history_file)
 
     def parse_page_data(self, url):
         bs_obj = self.web_delegate.get_web_data(url)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env sh
 which virtualenv
 RET=`echo $?`
 echo virtualenv installed, $RET

@@ -12,7 +12,8 @@ from scraper.scraper_config import ScraperConfig
 from scraper.category_config import CategoryConfig
 
 class ScraperTemplate(metaclass=ABCMeta):
-    def __init__(self, name, scraper_configuration_file, local_machine_status_file):
+    def __init__(self, name, scraper_configuration_file,
+            local_machine_status_file, local_machine_history_file):
         print("Scraper for %s!!!" % name)
         self.name = name
         self.__categories = []
@@ -25,7 +26,8 @@ class ScraperTemplate(metaclass=ABCMeta):
                 self.__local_machine_status_file)
         self.__scraper_config = ScraperConfig(self.name,
                 self.__scraper_configuration_file, self.__local_machine_status_file)
-        self.__history_delegate = HistoryDelegate("local_config/magnet_history.csv")
+        self.__local_machine_history_file = local_machine_history_file
+        self.__history_delegate = HistoryDelegate(self.__local_machine_history_file)
 
         trans_id = self.__system_config.get_config_local("trans-id")
         trans_pw = self.__system_config.get_config_local("trans-pw")
