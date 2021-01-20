@@ -18,6 +18,8 @@ def main():
 
     if scraper.check_site_alive():
         scraper.execute_scraper()
+    else:
+        scraper.correct_url()
 
     # Torrentsir
     scraper = ScraperTorrentsir(scraper_configuration_file,
@@ -26,6 +28,8 @@ def main():
 
     if scraper.check_site_alive():
         scraper.execute_scraper()
+    else:
+        scraper.correct_url()
 
     sys.exit()
 
