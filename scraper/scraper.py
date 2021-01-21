@@ -11,6 +11,8 @@ from scraper.system_config import SystemConfig
 from scraper.scraper_config import ScraperConfig
 from scraper.category_config import CategoryConfig
 
+import re
+
 class ScraperTemplate(metaclass=ABCMeta):
     def __init__(self, name, scraper_configuration_file,
             local_machine_status_file, local_machine_history_file):
@@ -55,6 +57,21 @@ class ScraperTemplate(metaclass=ABCMeta):
     def check_site_alive(self):
         '''각 site가 살아있는지 확인'''
         return self.web_delegate.check_url_alive(self.__scraper_config.get_config_scraper('url'))
+
+    def correct_url(self):
+        '''접속불가 토렌트 사이트 URL 순회 접속시도'''
+        base = self.__scraper_config.get_config_scraper('url')
+        start_num = int(re.findall(r'\d+', base)[0])
+        for num in range(start_num, start_num+5):
+            try_url = re.sub('[0-9]+', str(num), base)
+            print("Looking for.. ", try_url)
+            if self.web_delegate.check_url_alive(try_url):
+                self.__scraper_config.set_config_scraper(
+                    'url', try_url)
+                print('The new torrent site found!!.\n')
+                self.execute_scraper()
+                return
+        print('Fail to find a new torrent site.')           
 
     def aggregation_categories(self):
         '''json parsing으로 site 내의 categories 생성'''
