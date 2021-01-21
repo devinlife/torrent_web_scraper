@@ -59,9 +59,10 @@ class ScraperTemplate(metaclass=ABCMeta):
         return self.web_delegate.check_url_alive(self.__scraper_config.get_config_scraper('url'))
 
     def correct_url(self):
+        '''접속불가 토렌트 사이트 URL 순회 접속시도'''
         base = self.__scraper_config.get_config_scraper('url')
         start_num = int(re.findall(r'\d+', base)[0])
-        for num in range(start_num, 100, 1):
+        for num in range(start_num, start_num+5):
             try_url = re.sub('[0-9]+', str(num), base)
             print("Looking for.. ", try_url)
             if self.web_delegate.check_url_alive(try_url):
@@ -69,11 +70,8 @@ class ScraperTemplate(metaclass=ABCMeta):
                     'url', try_url)
                 print('The new torrent site found!!.\n')
                 self.execute_scraper()
-                break
-            elif num is 99:
-                print('Fail to find a new torrent site.')
-                break
-        pass
+                return
+        print('Fail to find a new torrent site.')           
 
     def aggregation_categories(self):
         '''json parsing으로 site 내의 categories 생성'''
