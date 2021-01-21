@@ -16,7 +16,6 @@ import re
 class ScraperTemplate(metaclass=ABCMeta):
     def __init__(self, name, scraper_configuration_file,
             local_machine_status_file, local_machine_history_file):
-        print("Scraper for %s!!!" % name)
         self.name = name
         self.__categories = []
         self.__title_checker = TitleChecker()
@@ -66,12 +65,12 @@ class ScraperTemplate(metaclass=ABCMeta):
             try_url = re.sub('[0-9]+', str(num), base)
             print("Looking for.. ", try_url)
             if self.web_delegate.check_url_alive(try_url):
-                self.__scraper_config.set_config_scraper(
-                    'url', try_url)
                 print('The new torrent site found!!.\n')
-                self.execute_scraper()
-                return
+                self.__scraper_config.set_base_url(try_url)
+                return True
+
         print('Fail to find a new torrent site.')           
+        return False
 
     def aggregation_categories(self):
         '''json parsing으로 site 내의 categories 생성'''
@@ -84,7 +83,9 @@ class ScraperTemplate(metaclass=ABCMeta):
 
         for category_name in categories:
             _ = CategoryConfig(self.name, category_name,
-                    self.__scraper_configuration_file, self.__local_machine_status_file)
+                    self.__scraper_configuration_file,
+                    self.__local_machine_status_file,
+                    self.__scraper_config.get_base_url())
             self.__categories.append(_)
 
         print("Aggregation categories for : " + str(self))

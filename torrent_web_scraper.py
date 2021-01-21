@@ -11,25 +11,27 @@ def main():
     local_machine_history_file = root_path + 'local_config/magnet_history.csv'
     scraper_configuration_file = root_path + 'scraper/scraper_configuration.json'
 
+    scrapers = []
+
     # Torrentmax
     scraper = ScraperTorrentmax(scraper_configuration_file,
             local_machine_status_file, local_machine_history_file)
-    scraper.aggregation_categories()
-
-    if scraper.check_site_alive():
-        scraper.execute_scraper()
-    else:
-        scraper.correct_url()
+    scrapers.append(scraper)
 
     # Torrentsir
     scraper = ScraperTorrentsir(scraper_configuration_file,
             local_machine_status_file, local_machine_history_file)
-    scraper.aggregation_categories()
+    scrapers.append(scraper)
 
-    if scraper.check_site_alive():
-        scraper.execute_scraper()
-    else:
-        scraper.correct_url()
+    for scraper in scrapers:
+        print("Scraper for %s!!!" % scraper.name)
+        ret = scraper.check_site_alive()
+        if not ret:
+            ret = scraper.correct_url()
+
+        if ret:
+            scraper.aggregation_categories()
+            scraper.execute_scraper()
 
     sys.exit()
 
