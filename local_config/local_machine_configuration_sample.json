@@ -1,4 +1,6 @@
 {
+    "download-folder": "your_transmission_download_folder, ex) /mnt/exhdd1/download/",
+    "plex-folder": "your_plex_tv_folder, ex) /mnt/exhdd1/plex/tv/",
     "trans-host": "your_transmission_ip, ex) 192.168.0.1",
     "trans-id": "your_id",
     "trans-port": "your_transmission_ip, ex) 9091",
