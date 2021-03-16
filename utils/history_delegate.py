@@ -1,11 +1,12 @@
 import csv
 import os.path
 
+
 class HistoryDelegate:
     def __init__(self, historyFile):
         self.__csv_file = historyFile
 
-        #if not os.path.isfile(self.__csv_file):
+        # if not os.path.isfile(self.__csv_file):
         if not self.__exist_history_file():
             try:
                 open(self.__csv_file, 'x')
@@ -25,7 +26,7 @@ class HistoryDelegate:
             ff = csv.reader(f)
             for row in ff:
                 if magnet == row[3]:
-                    print("Fail to add magnet for [%s] which was already downloaded." % row[2])
+                    # print("Fail to add magnet for [%s] which was already downloaded." % row[2])
                     return True
         return False
 

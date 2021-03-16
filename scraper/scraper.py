@@ -13,9 +13,10 @@ from scraper.category_config import CategoryConfig
 
 import re
 
+
 class ScraperTemplate(metaclass=ABCMeta):
     def __init__(self, name, scraper_configuration_file,
-            local_machine_status_file, local_machine_history_file):
+                 local_machine_status_file, local_machine_history_file):
         self.name = name
         self.__categories = []
         self.__title_checker = TitleChecker()
@@ -24,9 +25,9 @@ class ScraperTemplate(metaclass=ABCMeta):
         self.__scraper_configuration_file = scraper_configuration_file
         self.__local_machine_status_file = local_machine_status_file
         self.__system_config = SystemConfig(self.__scraper_configuration_file,
-                self.__local_machine_status_file)
+                                            self.__local_machine_status_file)
         self.__scraper_config = ScraperConfig(self.name,
-                self.__scraper_configuration_file, self.__local_machine_status_file)
+                                              self.__scraper_configuration_file, self.__local_machine_status_file)
         self.__local_machine_history_file = local_machine_history_file
         self.__history_delegate = HistoryDelegate(self.__local_machine_history_file)
 
@@ -34,9 +35,10 @@ class ScraperTemplate(metaclass=ABCMeta):
         trans_pw = self.__system_config.get_config_local("trans-pw")
         trans_host = self.__system_config.get_config_local("trans-host")
         trans_port = self.__system_config.get_config_local("trans-port")
+        plex_folder = self.__system_config.get_config_local("plex-folder")
 
         self.__transmission_delegate = TransmissionDelegate(trans_id, trans_pw,
-                trans_host, trans_port, self.history_delegate)
+                trans_host, trans_port, plex_folder, self.history_delegate)
 
     def __str__(self):
         return self.name
@@ -69,13 +71,13 @@ class ScraperTemplate(metaclass=ABCMeta):
                 self.__scraper_config.set_base_url(try_url)
                 return True
 
-        print('Fail to find a new torrent site.')           
+        print('Fail to find a new torrent site.')
         return False
 
     def aggregation_categories(self):
         '''json parsing으로 site 내의 categories 생성'''
         categories = [x.strip() for x in
-                self.__scraper_config.get_config_scraper('categories').split(',')]
+                      self.__scraper_config.get_config_scraper('categories').split(',')]
 
         if len(categories) == 1 and categories[0] is "":
             print("Scrapping for this site is disabled.")
@@ -83,9 +85,9 @@ class ScraperTemplate(metaclass=ABCMeta):
 
         for category_name in categories:
             _ = CategoryConfig(self.name, category_name,
-                    self.__scraper_configuration_file,
-                    self.__local_machine_status_file,
-                    self.__scraper_config.get_base_url())
+                               self.__scraper_configuration_file,
+                               self.__local_machine_status_file,
+                               self.__scraper_config.get_base_url())
             self.__categories.append(_)
 
         print("Aggregation categories for : " + str(self))
@@ -146,7 +148,7 @@ class ScraperTemplate(metaclass=ABCMeta):
                 else:
                     print("board_id_num is wrong, can't update latest ID - %d." % board_id_num)
 
-                #print("info: parse info=\t[%s][%s][%d] - %s"
+                # print("info: parse info=\t[%s][%s][%d] - %s"
                 #        % (self.name, category.get_category(), board_id_num, title))
 
                 matched_name = self.__title_checker.validate_board_title(title)
@@ -163,7 +165,7 @@ class ScraperTemplate(metaclass=ABCMeta):
                 if not ret:
                     continue
 
-                #TODO: remove_transmission_remote method는 pass 상태임
+                # TODO: remove_transmission_remote method는 pass 상태임
                 self.__transmission_delegate.remove_transmission_remote(matched_name)
 
         category.set_config_local('history', new_latest_id)
