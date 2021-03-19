@@ -16,9 +16,12 @@ torrent_web_scraper를 설정해두면, 토렌트 다운로드를 위해 토렌�
 1. local_config/local_machine_configuration.json 에서 트랜스미션 항목 작성, 필요 파이썬 라이브러리 설치. (이상하게 저는 쉘스크립트가 잘 안되네요;)
  
 2. local_config/local_machine_configuration.json 에서 media-folder 항목에 '폴더'를 지정
+    
     지정된 폴더 아래에 예) '순풍산부인과' 폴더를 작성하면 자동으로 검색해서 해당 폴더에 다운로드 (저작권을 염두해두시고 다운로드 하세요!)
+    
     폴더 삭제 시에는 더이상 다운로드를 하지 않음
-     $python3 torrent_web_scraper.py
+    
+    $python3 torrent_web_scraper.py
 
 3. 구글링해서 토렌트 사이트를 찾아줍니다.
 
