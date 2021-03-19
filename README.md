@@ -11,7 +11,9 @@ torrent_web_scraper를 설정해두면, 토렌트 다운로드를 위해 토렌�
 [Torrent_web_scraper: 토렌트 자동 다운로드 프로젝트 소개/설치](https://devinlife.com/project%20torrnet_web_scraper/torrent-web-scraper/)
 
 
-local_config/local_machine_configuration.json 에서 plex-folder 항목에 '폴더'를 지정하면
-폴더 이하에 원하는 프로그램 리스트와 같은 폴더를 생성하여 토렌트를 해당 폴더로 다운로드함.
-필요 없는 경우 해당 항목 줄("plex-folder": ... )을 삭제하면 트랜스미션 디폴드 상태로 진행함.
- 
+# 다른점
+1. 구글링해서 토렌트 사이트를 찾아줍니다.
+2. local_config/local_machine_configuration.json 에서 media-folder 항목에 '폴더'를 지정
+   가. 지정된 폴더 아래에 예) '순풍산부인과' 폴더를 작성하면 자동으로 검색해서 해당 폴더에 다운로드 (저작권을 염두해두시고 다운로드 하세요!)
+   나. 폴더 삭제 시에는 더이상 다운로드를 하지 않음
+3. 폴더가 씌워진 파일은 원래 위치로 옮겨준 후 껍데기 폴더를 삭제함 (HTML 광고 파일 폴더 제거용) 
