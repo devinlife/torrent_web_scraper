@@ -11,8 +11,8 @@ from utils.file_move import FileMover
 from scraper.board_item_iterator import BoardItemIterator
 from scraper.board_page_iterator import BoardPageIterator
 from scraper.system_config import SystemConfig
-from scraper.scraper_config import ScraperConfig
-from scraper.category_config import CategoryConfig
+# from scraper.scraper_config import ScraperConfig
+# from scraper.category_config import CategoryConfig
 
 import re
 
@@ -25,7 +25,7 @@ class ScraperTemplate(metaclass=ABCMeta):
         self.__local_machine_status_file = local_machine_status_file
         self.__local_machine_badsites_file = local_machine_badsites_file
         self.__system_config = SystemConfig(self.__local_machine_status_file)
-        self.__scraper_config = ScraperConfig(self.__local_machine_status_file)
+        # self.__scraper_config = ScraperConfig(self.__local_machine_status_file)
         self.__local_machine_history_file = local_machine_history_file
         self.__history_delegate = HistoryDelegate(self.__local_machine_history_file)
 

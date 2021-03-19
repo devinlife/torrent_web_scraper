@@ -2,9 +2,6 @@ import os
 
 class Item:
     def __init__(self, info):
-        # self.title = info[0].strip().lower().split(" ")
-        # self.resolutions = info[1]
-        # self.releases = info[2]
         self.title = info.lower().strip().split(" ")
         self.resolutions = ['720']
         self.releases = ['NEXT']
