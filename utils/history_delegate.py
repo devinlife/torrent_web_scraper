@@ -25,7 +25,7 @@ class HistoryDelegate:
         with open(self.__csv_file, 'r', encoding="utf-8") as f:
             ff = csv.reader(f)
             for row in ff:
-                if magnet == row[3]:
+                if magnet == row[2]:
                     # print("Fail to add magnet for [%s] which was already downloaded." % row[2])
                     return True
         return False

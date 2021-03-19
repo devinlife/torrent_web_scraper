@@ -1,20 +1,28 @@
-from local_config.program_list import title_list
+import os
 
 class Item:
     def __init__(self, info):
-        self.title = info[0].strip().lower().split(" ")
-        self.resolutions = info[1]
-        self.releases = info[2]
+        # self.title = info[0].strip().lower().split(" ")
+        # self.resolutions = info[1]
+        # self.releases = info[2]
+        self.title = info.lower().strip().split(" ")
+        self.resolutions = ['720']
+        self.releases = ['NEXT']
 
     def __repr__(self):
-        return "{} with {} from {}".format(" ".join(self.title),
-                self.resolutions, self.releases)
+        return "{} with {} from {}".format(" ".join(self.title), self.resolutions, self.releases)
 
 class TitleChecker:
-    def __init__(self):
+    def __init__(self, media_folder):
         self.__list = []
-        for info in title_list:
-            self.__list.append(Item(info))
+        self.__media_folder_list = os.listdir(media_folder)
+        for a in self.__media_folder_list:
+            folderORfile = os.path.join(media_folder, a)
+            if os.path.isdir(folderORfile):
+                self.__list.append(Item(a))
+
+    def tvlist(self):
+        return self.__list
 
     def validate_board_title(self, board_title):
         "board_title string 값이 요청한 목록에 존재하는지 확인"
@@ -23,7 +31,6 @@ class TitleChecker:
         candidate = self.__validate_title(board_title)
         if not candidate:
             return False
-
         ret = self.__validate_resolution(board_title, candidate)
         if not ret:
             return False

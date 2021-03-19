@@ -1,23 +1,26 @@
+import os
 import sys
 import json
 import requests
 
 from bs4 import BeautifulSoup
 
+
 class TransmissionDelegate:
-    def __init__(self, trans_id, trans_pw, trans_host, trans_port,
-            history_delegate=None):
+    def __init__(self, trans_id, trans_pw, trans_host, trans_port, media_folder, history_delegate=None):
         self.__id = trans_id
         self.__pw = trans_pw
         self.__ip = trans_host
         self.__port = trans_port
         self.__history_delegate = history_delegate
         self.__url = "http://%s:%s@%s:%s/transmission/rpc" % (self.__id, self.__pw,
-                self.__ip,self.__port)
+                                                              self.__ip, self.__port)
+        self.__media_folder = media_folder
         _ = self.__rpc_get_session()
 
         if _ is None:
-            print("Failed to connect transmission - %s:%s" % (self.__ip, self.__port))
+            print("Failed to connect transmission - %s:%s" %
+                  (self.__ip, self.__port))
             sys.exit()
         else:
             self.__session = _
@@ -29,7 +32,7 @@ class TransmissionDelegate:
         array = code_text.split()
 
         if len(array) == 2 and array[0] == "X-Transmission-Session-Id:":
-            session_id ={ array[0].replace(":", "") : array[1]}
+            session_id = {array[0].replace(":", ""): array[1]}
             return session_id
 
         return None
@@ -49,30 +52,49 @@ class TransmissionDelegate:
             if self.__history_delegate.check_magnet_history(magnet_info.magnet):
                 return False
 
-        payload = {
-                "arguments":{
-                    "filename": magnet_info.magnet
-                    },
+        if self.__media_folder != None:
+            tvtitle = ' '.join(magnet_info.matched_name.title)
+            tvtitle_folder = os.path.join(self.__media_folder, tvtitle)
+            try:
+                if not os.path.isdir(tvtitle_folder):
+                    os.mkdir(tvtitle_folder)
+            except Exception as e:
+                print(e)
+
+            payload = {
+                "arguments": {
+                    "filename": magnet_info.magnet,
+                    "download-dir": tvtitle_folder
+                },
                 "method": "torrent-add"
-                }
+            }
+
+        else:
+            payload = {
+                "arguments": {
+                    "filename": magnet_info.magnet
+                },
+                "method": "torrent-add"
+            }
 
         res = self.__rpc_post(payload)
         if res['result'] == 'success':
-            print("Success to add magnet for [%s]." % magnet_info.title)
+            print("\tAdded %s." % magnet_info.title)
         else:
             return False
 
         if self.__history_delegate is not None:
-            self.__history_delegate.add_magnet_info_to_history(magnet_info.get_list())
+            self.__history_delegate.add_magnet_info_to_history(
+                magnet_info.get_list())
             return True
 
         return False
 
     def list_download_done(self):
         payload = {
-            "arguments":{
+            "arguments": {
                 "fields": ["id", "name", "isFinished", "percentDone"]
-                },
+            },
             "method": "torrent-get"
         }
         res = self.__rpc_post(payload)
