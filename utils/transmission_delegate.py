@@ -79,7 +79,7 @@ class TransmissionDelegate:
 
         res = self.__rpc_post(payload)
         if res['result'] == 'success':
-            print("\tAdded %s." % magnet_info.title)
+            print("\tAdded %s" % magnet_info.title)
         else:
             return False
 
