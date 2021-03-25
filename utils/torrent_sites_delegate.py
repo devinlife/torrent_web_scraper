@@ -18,7 +18,7 @@ class TorrentSitesDelegate:
 
     def collect_goodsites(self):
         query = "토렌트 순위"
-        for g in search(query, tld='com', num=5, stop=3, pause=1.0):
+        for g in search(query, tld='com', num=5, stop=2):
             self.__ranksites.append(g)
         for ranksite in self.__ranksites:
             try:
@@ -40,6 +40,7 @@ class TorrentSitesDelegate:
         df = pd.read_csv(self.__badsites_file, names=['badsite'])
         self.__badsites = df.badsite.to_list()
         goodsites = list(set(self.__refined_anchors)-set(self.__badsites))
+        print("{} torrent sites are founded.".format(len(goodsites)+1))
         return goodsites
 
     def add_failsite_to_badsites(self, goodsite):
