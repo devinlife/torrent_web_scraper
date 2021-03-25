@@ -38,13 +38,13 @@ class ScraperTemplate(metaclass=ABCMeta):
         self.__transmission_delegate = TransmissionDelegate(
             trans_id, trans_pw, trans_host, trans_port, media_folder, self.history_delegate)
         self.__torrent_sites_delegate = TorrentSitesDelegate(
-            self.__local_machine_badsites_file)
+            self.__local_machine_badsites_file, self.web_delegate)
         self.__file_move = FileMover(
             media_folder, self.__title_checker.tvlist())
 
-    @property
-    def categories(self):
-        return self.__categories
+    # @property
+    # def categories(self):
+    #     return self.__categories
 
     @property
     def torrent_sites_delegate(self):
