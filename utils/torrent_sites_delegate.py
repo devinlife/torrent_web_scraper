@@ -13,16 +13,18 @@ class TorrentSitesDelegate:
         self.__anchors = []
         self.__badsites = []
         self.__ranksites = []
-        # self.__refined_anchors = []
 
     def collect_goodsites(self):
         query = "토렌트 순위"
-        for g in search(query, tld='com', num=10, stop=2):
+        for g in search(query, tld='co.kr', num=10, stop=3):
             self.__ranksites.append(g)
         for ranksite in self.__ranksites:
             try:
                 soup = self.__web_delegate.get_web_data(ranksite)
-                exclude = 'http://jaewook.net', 'https://lsrank.com/'
+                exclude = 'http://jaewook.net', 'https://lsrank.com', \
+                    'https://twitter.com', 'https://ps.devbj.com', \
+                    'https://torrentrank.net', 'https://github.com', \
+                    'https://www.torrentdia', 'https://www.instagram.com'
                 for anchor in soup.find_all('a'):
                     if anchor.get('href').startswith('http') and not anchor.get('href').startswith(exclude):
                         if not anchor.get('href').endswith('/'):
@@ -37,7 +39,7 @@ class TorrentSitesDelegate:
         self.__badsites = df.badsite.to_list()
         goodsites = list(set(self.__anchors)-set(self.__badsites))
 
-        print("{} torrent sites are founded.".format(len(goodsites)+1))
+        print("{} torrent sites are founded.".format(len(goodsites)))
         return goodsites
 
     def add_failsite_to_badsites(self, goodsite):

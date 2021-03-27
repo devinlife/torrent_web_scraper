@@ -3,17 +3,15 @@ import re
 
 
 class ScraperTorrent(ScraperTemplate):
-    def __init__(self, local_machine_status_file, local_machine_badsites_file, local_machine_history_file):
+    def __init__(self, local_machine_status_file, local_machine_badsites_file, local_machine_history_file, pages_to_scrap):
         super().__init__(local_machine_status_file,
-                         local_machine_badsites_file, local_machine_history_file)
+                         local_machine_badsites_file, local_machine_history_file, pages_to_scrap)
 
     def collect_goodsites(self):
         return self.torrent_sites_delegate.collect_goodsites()
 
     def parse_page_data(self, url):
 
-        # attribute = [['list-board', 'wr-subject'],
-        #              ['tbl_head01 tbl_wrap', 'bo_tit'], [], [], [], []]
         try:
             soup = self.web_delegate.get_web_data(url)
             _ = soup.find('div', attrs={'class': 'list-board'})
@@ -25,7 +23,7 @@ class ScraperTorrent(ScraperTemplate):
                 href = a_tag['href']
                 name_list.append([title, href])
             return name_list
-            
+
         except:
             _ = soup.find('div', attrs={'class': 'tbl_head01 tbl_wrap'})
             _list = _.find_all('div', attrs={'class': 'bo_tit'})

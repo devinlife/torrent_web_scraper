@@ -4,14 +4,9 @@ import shutil
 
 class FileMover():
     def __init__(self, media_folder, tvlist):
-        self.__tvlist = tvlist
+        self.__tvtitles = tvlist
         self.__media_folder = media_folder
-        self.__tvtitles = []
         self.__folders_to_delete = []
-
-        for tvtitle in self.__tvlist:
-            tmp=" ".join(tvtitle.title)
-            self.__tvtitles.append(tmp)
 
     def arrange_files(self):
         try:
@@ -21,12 +16,13 @@ class FileMover():
                     if files:
                         for file in files:
                             if (file.endswith('mp4')) and (file.find(tvtitle) > -1) and (path != target_folder):
-                                os.rename(path + '/' + file, target_folder + '/' + file)
+                                os.rename(path + '/' + file,
+                                          target_folder + '/' + file)
                                 self.__folders_to_delete.append(path)
 
                 for path, dirs, files in os.walk(target_folder):
                     if files:
-                        for file in files:                
+                        for file in files:
                             if file.startswith('[방영중]') and file.endswith('mp4'):
                                 tmp = file.split(']')[1].strip()
                                 os.rename(path + '/' + file, path + '/' + tmp)
@@ -37,9 +33,8 @@ class FileMover():
     def delete_folders(self):
         try:
             if self.__folders_to_delete != []:
-                for folder in self.__folders_to_delete:
+                for folder in list(set(self.__folders_to_delete)):
                     shutil.rmtree(folder)
 
         except Exception as e:
-            print(e)              
-
+            print(e)

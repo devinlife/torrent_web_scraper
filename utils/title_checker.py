@@ -17,9 +17,14 @@ class TitleChecker:
             folderORfile = os.path.join(media_folder, a)
             if os.path.isdir(folderORfile):
                 self.__list.append(Item(a))
+        self.__tvtitles = []
+
+        for tvtitle in self.__list:
+            tmp = " ".join(tvtitle.title)
+            self.__tvtitles.append(tmp)
 
     def tvlist(self):
-        return self.__list
+        return self.__tvtitles
 
     def validate_board_title(self, board_title):
         "board_title string 값이 요청한 목록에 존재하는지 확인"

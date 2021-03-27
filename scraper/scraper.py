@@ -11,19 +11,17 @@ from utils.file_move import FileMover
 from scraper.board_item_iterator import BoardItemIterator
 from scraper.board_page_iterator import BoardPageIterator
 from scraper.system_config import SystemConfig
-# from scraper.scraper_config import ScraperConfig
-# from scraper.category_config import CategoryConfig
 
 import re
 
 
 class ScraperTemplate(metaclass=ABCMeta):
-    def __init__(self, local_machine_status_file, local_machine_badsites_file, local_machine_history_file):
+    def __init__(self, local_machine_status_file, local_machine_badsites_file, local_machine_history_file, pages_to_scrap):
         self.__web_delegate = WebDelegate()
         self.__local_machine_status_file = local_machine_status_file
         self.__local_machine_badsites_file = local_machine_badsites_file
+        self.__pages_to_scrap = pages_to_scrap
         self.__system_config = SystemConfig(self.__local_machine_status_file)
-        # self.__scraper_config = ScraperConfig(self.__local_machine_status_file)
         self.__local_machine_history_file = local_machine_history_file
         self.__history_delegate = HistoryDelegate(
             self.__local_machine_history_file)
@@ -41,10 +39,6 @@ class ScraperTemplate(metaclass=ABCMeta):
             self.__local_machine_badsites_file, self.web_delegate)
         self.__file_move = FileMover(
             media_folder, self.__title_checker.tvlist())
-
-    # @property
-    # def categories(self):
-    #     return self.__categories
 
     @property
     def torrent_sites_delegate(self):
@@ -73,14 +67,15 @@ class ScraperTemplate(metaclass=ABCMeta):
 
         try:
             soup = self.web_delegate.get_web_data(goodsite)
-            categories_list = ['예능', '드라마', '영화', '시사', '방송', '다큐', 'TV프로']
+            categories_list = ['예능', '드라마', '영화', '시사', '방송', 'TV프로', '다큐']
 
             for item in soup.find_all('a'):
                 try:
                     for category in categories_list:
                         if (category in item.text):
                             href = item.get("href")
-                            h = re.compile("bbs.*.[a-z][0-9]?[^d0-9 | ^w]$")
+                            h = re.compile(
+                                "bbs[/]board[.]php[?]bo[_]table[=](?!basic$|review$|board[0-9]$)[a-z]+[0-9]?$")
                             h_tail = h.findall(href)
                             if h_tail is not []:
                                 href = goodsite + h_tail[0] + '&page='
@@ -114,7 +109,9 @@ class ScraperTemplate(metaclass=ABCMeta):
             self.__execute_scraper_for_category(category)
 
     def __execute_scraper_for_category(self, category):
-        page_iterator = BoardPageIterator(category, int(1), int(3))
+        page_iterator = BoardPageIterator(
+            category, int(1), self.__pages_to_scrap)
+
         try:
             for page in page_iterator:
                 # print(page)
@@ -126,7 +123,6 @@ class ScraperTemplate(metaclass=ABCMeta):
                     matched_name = self.__title_checker.validate_board_title(
                         title)
                     if not matched_name:
-                        # print("Not matched_name ", title)
                         continue
                     magnet = self.parse_magnet_from_page_url(href)
                     if magnet is None:
@@ -135,13 +131,22 @@ class ScraperTemplate(metaclass=ABCMeta):
                     magnet_info = MagnetInfo(title, magnet, matched_name)
                     ret = self.__transmission_delegate.add_magnet_transmission_remote(
                         magnet_info)
+                    self.__result_download.append(
+                        " ".join(magnet_info.matched_name))
                     if not ret:
                         continue
 
-                    # TODO: remove_transmission_remote method는 pass 상태임
-                    self.__transmission_delegate.remove_transmission_remote(
-                        matched_name)
         except:
             pass
 
-        # category.set_config_local('history', new_latest_id)
+    def end(self):
+        self.__file_move.arrange_files()
+
+        try:
+            for tvtitle in self.__title_checker.tvlist():
+                self.__transmission_delegate.remove_transmission_remote(
+                    tvtitle)
+        except:
+            pass
+
+        self.__file_move.delete_folders()

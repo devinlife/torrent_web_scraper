@@ -93,7 +93,7 @@ class TransmissionDelegate:
     def list_download_done(self):
         payload = {
             "arguments": {
-                "fields": ["id", "name", "isFinished", "percentDone"]
+                "fields": ["id", "name", "percentDone"]
             },
             "method": "torrent-get"
         }
@@ -104,26 +104,20 @@ class TransmissionDelegate:
                 print(torrent["name"])
         return
 
-    def remove_transmission_remote(self, contain_name):
-        "TODO: 상태가 Finished 이고  contain_name 인 토렌트 id를 구해서 삭제"
-
-        """
+    def remove_transmission_remote(self, tvtitle):
         payload = {
-            "arguments":{
-                "fields": ["id", "name", "isFinished"]
-                },
+            "arguments": {
+                "fields": ["id", "name", "percentDone"]
+            },
             "method": "torrent-get"
         }
 
         res = self.__rpc_post(payload)
-        print(res)
-
         for torrent in res["arguments"]["torrents"]:
-            if contain_name in torrent["name"] and torrent["isFinished"]:
+            if tvtitle in torrent["name"] and torrent["percentDone"] == 1:
                 payload = {
                     "method": "torrent-remove",
-                    "arguments":{"ids":[torrent["id"]]}
-                    }
+                    "arguments": {"ids": [torrent["id"]]}
+                }
                 res = self.__rpc_post(payload)
         return
-        """
