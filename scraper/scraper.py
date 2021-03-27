@@ -127,12 +127,9 @@ class ScraperTemplate(metaclass=ABCMeta):
                     magnet = self.parse_magnet_from_page_url(href)
                     if magnet is None:
                         continue
-
                     magnet_info = MagnetInfo(title, magnet, matched_name)
                     ret = self.__transmission_delegate.add_magnet_transmission_remote(
                         magnet_info)
-                    self.__result_download.append(
-                        " ".join(magnet_info.matched_name))
                     if not ret:
                         continue
 
