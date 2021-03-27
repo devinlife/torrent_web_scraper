@@ -22,6 +22,7 @@ torrent_web_scraper를 설정해두면, 토렌트 다운로드를 위해 토렌�
     폴더 삭제 시에는 더이상 다운로드를 하지 않음
     
     $python3 torrent_web_scraper.py
+    
     $python3 torrent_web_scraper.py 1       // cron 사용시에는 뒤에 띄어쓴 후 1을 추가해주면 1 페이지 씩만 검색합니다. 기본은 3 페이지.
 
 3. 구글링해서 토렌트 사이트를 찾아줍니다. 
