@@ -16,7 +16,7 @@ def main():
     # Torrentmax
     scraper = ScraperTorrentmax(scraper_configuration_file,
             local_machine_status_file, local_machine_history_file)
-    scrapers.append(scraper)
+    #scrapers.append(scraper)
 
     # Torrentsir
     scraper = ScraperTorrentsir(scraper_configuration_file,
