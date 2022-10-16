@@ -6,11 +6,11 @@
     "torrentmax-drama-url": "/max/DRAMA/p",
     "torrentmax-start-index": "1",
     "torrentmax-max-page": "10",
-    "torrentsir-url": "https://torrentsir74.com",
+    "torrentsir-url": "https://torrentsir77.com",
     "torrentsir-categories": "enter,sisa,drama",
     "torrentsir-enter-url": "/bbs/board.php?bo_table=entertain&page=",
     "torrentsir-sisa-url": "/bbs/board.php?bo_table=tv&page=",
     "torrentsir-drama-url": "/bbs/board.php?bo_table=drama&page=",
     "torrentsir-start-index": "1",
-    "torrentsir-max-page": "5"
+    "torrentsir-max-page": "10"
 }
