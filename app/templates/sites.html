@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}사이트{% endblock %}
+{% block content %}
+<h1>사이트</h1>
+{% if error %}<p class="flash">{{ error }}</p>{% endif %}
+<form class="row" method="post" action="/settings/doctor-model">
+  <label>doctor 기본 모델
+    <select name="model">{% for m in ["sonnet", "opus"] %}
+      <option value="{{ m }}" {{ "selected" if m == doctor_model }}>{{ m }}</option>{% endfor %}
+    </select></label>
+  <button>적용</button>
+</form>
+<table>
+  <tr><th>사이트</th><th>상태</th><th>최근 성공</th><th>doctor</th></tr>
+  {% for s in sites %}{% set r = reports.get(s.id) %}
+  <tr class="{{ '' if s.enabled else 'off' }}">
+    <td>
+      <strong>{{ s.name }}</strong> <a href="{{ s.url }}" rel="noreferrer">{{ s.url }}</a>
+      <details>
+        <summary>수정</summary>
+        <form method="post" action="/sites/{{ s.id }}">
+          <input type="url" name="url" value="{{ s.url }}" required>
+          <textarea name="boards" rows="{{ s.boards | length + 1 }}">{{ s.boards | join("\n") }}</textarea>
+          <button>적용</button>
+        </form>
+      </details>
+    </td>
+    <td>
+      <form class="inline" method="post" action="/sites/{{ s.id }}/enabled">
+        <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
+        <button>{{ "끄기" if s.enabled else "켜기" }}</button>
+      </form>
+    </td>
+    <td>{{ s.last_ok_at or "-" }}</td>
+    <td>
+      {% if r %}<a href="/doctor/{{ r.id }}"><span class="badge {{ r.verdict or r.status }}">{{ r.verdict or r.status }}</span></a>{% endif %}
+      <form class="inline" method="post" action="/sites/{{ s.id }}/doctor">
+        <select name="model">{% for m in ["sonnet", "opus"] %}
+          <option value="{{ m }}" {{ "selected" if m == doctor_model }}>{{ m }}</option>{% endfor %}
+        </select>
+        <button>doctor</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

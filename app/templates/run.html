@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}실행 #{{ run.id }}{% endblock %}
+{% block content %}
+<h1>실행 #{{ run.id }} <span class="badge {{ run.status }}">{{ run.status }}</span></h1>
+<p>시작 {{ run.started }} · 종료 {{ run.finished or "-" }} · 매칭 {{ run.matched }} · 추가 {{ run.added }}</p>
+<pre>{{ run.log }}</pre>
+<p><a href="/">← 대시보드</a></p>
+{% endblock %}

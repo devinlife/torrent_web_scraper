@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}대시보드{% endblock %}
+{% block content %}
+<h1>대시보드</h1>
+{% if msg == "already-running" %}<p class="flash info">이미 실행 중입니다.</p>{% endif %}
+<p>
+  다음 실행: <strong>{{ next_run_at.strftime("%Y-%m-%d %H:%M") if next_run_at else "-" }}</strong>
+  {% if running %}<span class="badge running">실행 중</span>{% endif %}
+</p>
+<form class="row" method="post" action="/settings/interval">
+  <label>주기(분) <input type="number" name="minutes" min="1" max="1440" required value="{{ interval_min }}"></label>
+  <button>적용</button>
+</form>
+<form class="row" method="post" action="/run-now"><button>지금 실행</button></form>
+
+<h2>최근 실행</h2>
+<table>
+  <tr><th>#</th><th>시작</th><th>종료</th><th>상태</th><th>매칭</th><th>추가</th></tr>
+  {% for r in runs %}
+  <tr>
+    <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.started }}</td><td>{{ r.finished or "" }}</td>
+    <td><span class="badge {{ r.status }}">{{ r.status }}</span></td><td>{{ r.matched }}</td><td>{{ r.added }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">아직 없음</td></tr>{% endfor %}
+</table>
+
+<h2>다운로드 이력</h2>
+<table>
+  <tr><th>프로그램</th><th>회차</th><th>제목</th><th>사이트</th><th>추가 시각</th></tr>
+  {% for d in downloads %}
+  <tr><td>{{ d.program_name or "-" }}</td><td>{{ d.episode or "-" }}</td><td>{{ d.title }}</td>
+      <td>{{ d.site }}</td><td>{{ d.added_at }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">아직 없음</td></tr>{% endfor %}
+</table>
+{% endblock %}

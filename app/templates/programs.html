@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}프로그램{% endblock %}
+{% block content %}
+<h1>프로그램</h1>
+{% if error %}<p class="flash">{{ error }}</p>{% endif %}
+<form class="row" method="post" action="/programs">
+  <input name="name" placeholder="프로그램 이름" required>
+  <select name="resolution">
+    <option value="any">any</option><option value="720p">720p</option><option value="1080p">1080p</option>
+  </select>
+  <button>추가</button>
+</form>
+<table>
+  <tr><th>#</th><th>이름</th><th>해상도</th><th>상태</th><th></th></tr>
+  {% for p in programs %}
+  <tr class="{{ '' if p.enabled else 'off' }}">
+    <td>{{ p.id }}</td><td>{{ p.name }}</td><td>{{ p.resolution }}</td>
+    <td>
+      <form class="inline" method="post" action="/programs/{{ p.id }}/enabled">
+        <input type="hidden" name="enabled" value="{{ 0 if p.enabled else 1 }}">
+        <button>{{ "끄기" if p.enabled else "켜기" }}</button>
+      </form>
+      {{ "켜짐" if p.enabled else "꺼짐" }}
+    </td>
+    <td>
+      <form class="inline" method="post" action="/programs/{{ p.id }}/delete"><button>삭제</button></form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="muted">매칭: 이름의 모든 단어가 제목에 포함되고 해상도가 맞으면(any는 전부) 다운로드합니다.</p>
+{% endblock %}
