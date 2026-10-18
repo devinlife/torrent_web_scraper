@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -44,7 +45,9 @@ def page(request: Request, name: str, **ctx):
 @app.get("/")
 async def index(request: Request, msg: str | None = None):
     conn, sched = request.app.state.db, request.app.state.scheduler
-    return page(request, "index.html", next_run_at=sched.next_run_at, running=sched.running,
+    nxt = sched.next_run_at
+    return page(request, "index.html", next_run_at=nxt, running=sched.running,
+                due=bool(nxt and nxt <= datetime.now()),
                 interval_min=db.get_setting(conn, "interval_min", "60"), msg=msg,
                 runs=db.list_runs(conn, 10), downloads=db.list_downloads(conn, 20))
 
@@ -52,7 +55,7 @@ async def index(request: Request, msg: str | None = None):
 @app.post("/run-now")
 async def run_now(request: Request):
     ok = request.app.state.scheduler.trigger_now()
-    return RedirectResponse("/" if ok else "/?msg=already-running", status_code=303)
+    return RedirectResponse("/?msg=started" if ok else "/?msg=already-running", status_code=303)
 
 
 @app.post("/settings/interval")

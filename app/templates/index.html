@@ -1,36 +1,48 @@
 {% extends "base.html" %}
 {% from "_macros.html" import badge %}
 {% block title %}대시보드{% endblock %}
+{% block head %}{% if running or msg == "started" %}<meta http-equiv="refresh" content="10; url=/">{% endif %}{% endblock %}
 {% block content %}
 <h1>대시보드</h1>
 {% if msg == "already-running" %}<p class="flash info">이미 실행 중입니다.</p>{% endif %}
+{% if msg == "started" %}<p class="flash info">실행을 시작했습니다.</p>{% endif %}
+{% if APP_ENV == "dev" %}<p class="muted">dry-run: Transmission 추가와 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다.</p>{% endif %}
+{% set last = runs[0] if runs else none %}
+{% if last %}<p>
+  {{ badge(last.status) }} 마지막 실행 #{{ last.id }} · {{ last.started|dt }} ({{ last.started|ago }})
+  · 매칭 {{ last.matched }} · 추가 {{ last.added }} · <a href="/runs/{{ last.id }}">로그</a>
+  {% if last.status in ("error", "partial") %} · <a href="/sites">사이트 확인 →</a>{% endif %}
+</p>{% endif %}
 <p>
-  다음 실행: <strong>{{ next_run_at|dt }}</strong>
-  {% if running %}<span class="badge running">실행 중</span>{% endif %}
+  {% if running %}{{ badge("running") }}
+  {% elif due %}다음 실행 <strong>곧 실행</strong>
+  {% else %}다음 실행 <strong>{{ next_run_at|dt }}</strong> ({{ next_run_at|ago }}){% endif %}
+  · {{ interval_min }}분마다
 </p>
 <form class="row" method="post" action="/settings/interval">
   <label>주기(분) <input type="number" name="minutes" min="1" max="1440" required value="{{ interval_min }}"></label>
-  <button>적용</button>
+  <button>저장</button>
 </form>
-<form class="row" method="post" action="/run-now"><button>지금 실행</button></form>
+<form class="row" method="post" action="/run-now"><button class="primary">지금 실행</button></form>
 
 <h2>최근 실행</h2>
 <div class="table"><table>
-  <tr><th>#</th><th>시작</th><th>종료</th><th>상태</th><th>매칭</th><th>추가</th></tr>
+  <tr><th class="num">#</th><th>시작</th><th>소요</th><th>상태</th><th class="num">매칭</th><th class="num">추가</th></tr>
   {% for r in runs %}
   <tr>
-    <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.started|dt }}</td><td>{{ r.finished|dt }}</td>
-    <td>{{ badge(r.status) }}</td><td>{{ r.matched }}</td><td>{{ r.added }}</td>
+    <td class="num"><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.started|dt }}</td><td>{{ r.started|dur(r.finished) }}</td>
+    <td>{{ badge(r.status) }}</td><td class="num">{{ r.matched }}</td>
+    <td class="num">{% if r.added %}<strong>{{ r.added }}</strong>{% else %}0{% endif %}</td>
   </tr>
   {% else %}<tr><td colspan="6" class="muted">아직 없음</td></tr>{% endfor %}
 </table></div>
 
 <h2>다운로드 이력</h2>
 <div class="table"><table>
-  <tr><th>프로그램</th><th>회차</th><th>제목</th><th>사이트</th><th>추가 시각</th></tr>
+  <tr><th>추가 시각</th><th>프로그램</th><th>회차</th><th>제목</th><th>사이트</th></tr>
   {% for d in downloads %}
-  <tr><td>{{ d.program_name or "-" }}</td><td>{{ d.episode or "-" }}</td><td>{{ d.title }}</td>
-      <td>{{ d.site }}</td><td>{{ d.added_at|dt }}</td></tr>
-  {% else %}<tr><td colspan="5" class="muted">아직 없음</td></tr>{% endfor %}
+  <tr><td>{{ d.added_at|dt }}</td><td>{{ d.program_name or "-" }}</td><td>{{ d.episode or "-" }}</td>
+      <td>{{ d.title }}</td><td>{{ d.site }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">아직 없음{% if APP_ENV == "dev" %} (dev는 기록하지 않음){% endif %}</td></tr>{% endfor %}
 </table></div>
 {% endblock %}
