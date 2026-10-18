@@ -112,6 +112,7 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 - 도구는 직접 만든 읽기 전용 4개뿐이다: `dns_tls_check`, `browse`, `run_parser`, `probe_domains`. 내장 WebFetch, Bash 등은 막는다(SNI 차단에 걸려 오판하기 때문).
 - 모델은 별칭 `sonnet`(기본) 또는 `opus`로 지정해 항상 최신을 쓴다.
 - 실행당 최대 15턴, 비용 상한 $1.
+- `browse`는 연결 끊김(`ERR_CONNECTION_CLOSED`/`RESET`)이면 5·10·15초 간격으로 다시 시도한다. ECH 설정이 늦게 와서 잠깐 평문 SNI로 붙는 일시 실패를 차단으로 오판하지 않기 위해서다.
 - 수정 제안은 자동 반영하지 않는다. 리포트의 [이 설정으로 변경] 버튼을 눌러야 사이트 설정이 바뀐다.
 - Chromium은 크롤링과 Doctor가 lock을 공유해서 동시에 하나만 뜬다.
 

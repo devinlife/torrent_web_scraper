@@ -22,3 +22,25 @@ def test_trim_html_keeps_posts():
     seen = doctor._trim_html(raw)[:15000]  # browse sends the model at most 15000 chars
     assert "<script" not in seen and len(seen) <= 15000 < len(raw)
     assert len(crawler.parse_board(seen, "https://torrentrj274.com/v-4-16")) >= 20
+
+
+def test_browse_retries_resets_spaced(monkeypatch):
+    import asyncio
+
+    from app.browser import FetchResult
+    results = [FetchResult(0, "u", "", "net::ERR_CONNECTION_CLOSED")] * 2 + [
+        FetchResult(200, "https://a.com/b", "<title>B</title><body>x</body>", None)]
+
+    class FakeBrowser:
+        async def fetch(self, url, **kw):
+            return results.pop(0)
+
+    sleeps = []
+
+    async def fake_sleep(s):
+        sleeps.append(s)
+    monkeypatch.setattr(doctor.asyncio, "sleep", fake_sleep)
+    browse = doctor.build_tools(None, FakeBrowser(), {"boards": []})[1]
+    text = asyncio.run(browse.handler({"url": "https://a.com/b"}))["content"][0]["text"]
+    assert "attempts: 1 ERR_CONNECTION_CLOSED, 2 ERR_CONNECTION_CLOSED, 3 status 200" in text
+    assert "transient: yes" in text and "status: 200" in text and sleeps == [5, 10]

@@ -59,6 +59,10 @@ CF_RE = re.compile(r"cf-chl|challenge-platform|turnstile|Just a moment", re.I)
 JUNK_RE = re.compile(r"<(script|style|svg|noscript)\b.*?</\1\s*>|<!--.*?-->", re.I | re.S)
 ATTR_RE = re.compile(r'\s(?!href=|title=)[\w:-]+=("[^"]*"|\'[^\']*\'|[^\s>]+)')
 BODY_RE = re.compile(r"<body", re.I)
+# Chromium falls back to plaintext SNI for a short window when the ECH config (DNS HTTPS record) is late,
+# and the ISP resets that; space out retries so a later attempt lands after the window.
+RESETS = ("net::ERR_CONNECTION_CLOSED", "net::ERR_CONNECTION_RESET", "net::ERR_EMPTY_RESPONSE")
+RESET_WAITS = (5, 10, 15)  # seconds before each extra attempt; 30 s wall-clock max, no extra turns
 
 
 def _public_http_url(url: str) -> bool:
@@ -109,6 +113,24 @@ def _dns_tls(host: str) -> list[str]:
     return out
 
 
+async def _fetch_spaced(browser, url: str):
+    """browser.fetch plus spaced retries on connection resets. Each fetch takes the browser lock on its own,
+    so the crawler can use Chromium during the sleeps."""
+    attempts = []
+    for wait in (0, *RESET_WAITS):
+        if wait:
+            await asyncio.sleep(wait)
+        r = await browser.fetch(url, timeout_ms=15000, retries=1)
+        attempts.append(f"{len(attempts) + 1} " + (r.error.removeprefix("net::") if r.error else f"status {r.status}"))
+        if r.error not in RESETS:
+            break
+    lines = [f"attempts: {', '.join(attempts)}"]
+    if len(attempts) > 1:
+        lines.append("transient: yes (failed then succeeded)" if r.error is None
+                     else f"transient: no (failed all {len(attempts)} attempts over {sum(RESET_WAITS)}+ s)")
+    return r, lines
+
+
 def _text(lines: list[str]) -> dict:
     return {"content": [{"type": "text", "text": "\n".join(lines)}]}
 
@@ -128,19 +150,21 @@ def build_tools(conn, browser, site: dict) -> list:
         return _text(await asyncio.to_thread(_dns_tls, urlsplit(h if "//" in h else "//" + h).hostname or h))
 
     @tool("browse", "Open a URL in our headless Chromium (same as the crawler). Returns status, final URL, "
-          "title, Cloudflare-challenge flag and trimmed HTML.", {"url": str},
+          "title, Cloudflare-challenge flag and trimmed HTML. Connection resets are retried ~5/10/15 s apart; "
+          "'attempts' lists each try.", {"url": str},
           annotations=ToolAnnotations(readOnlyHint=True, maxResultSizeChars=20000))
     async def browse(args):
         url = args["url"].strip()
         if not _public_http_url(url):
             return {**_text(["only public http(s):// URLs"]), "is_error": True}
-        r = await browser.fetch(url, timeout_ms=15000, retries=1)
+        r, attempts = await _fetch_spaced(browser, url)
         raw = r.html[:500_000]
         title = re.search(r"<title[^>]*>(.*?)</title>", raw, re.I | re.S)
         body = await asyncio.to_thread(_trim_html, raw)
         return _text([f"status: {r.status}", f"final_url: {r.final_url[:300]}",
                       f"title: {' '.join(title[1].split())[:200] if title else '-'}",
                       f"cloudflare_challenge: {'yes' if CF_RE.search(raw) else 'no'}", f"error: {r.error or '-'}",
+                      *attempts,
                       f"html ({min(len(body), 15000)} of {len(body)} chars, from <body, script/style/svg/noscript/"
                       f"comments and all attributes but href/title removed, whitespace collapsed):", body[:15000]])
 
