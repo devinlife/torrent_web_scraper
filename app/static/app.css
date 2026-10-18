@@ -195,6 +195,7 @@ code, kbd, pre, samp { font-family: var(--mono); }
 .table .end { text-align: right; width: 1%; white-space: nowrap; }
 .table .grow { width: 100%; }
 .table .wide { min-width: 12rem; }
+.table time { white-space: nowrap; }
 .table tr.off td { color: var(--text-3); }
 .table .sub { color: var(--text-3); font-size: var(--fs-xs); line-height: 16px; }
 .truncate { max-width: 1px; width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

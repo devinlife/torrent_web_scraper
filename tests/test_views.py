@@ -7,7 +7,7 @@ NOW = datetime(2026, 10, 18, 20, 0, 0)
 
 def test_dt():
     assert dt(None) == "-"
-    assert ">19:23</time>" in dt("2026-10-18T19:23:10", NOW)
+    assert ">10-18 19:23</time>" in dt("2026-10-18T19:23:10", NOW)
     assert 'datetime="2026-10-18T19:23:10"' in dt("2026-10-18T19:23:10", NOW)
     assert ">10-17 09:05<" in dt(datetime(2026, 10, 17, 9, 5), NOW)
     assert ">2025-01-02 03:04<" in dt("2025-01-02T03:04:00", NOW)

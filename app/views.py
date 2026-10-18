@@ -30,7 +30,7 @@ def dt(v, now: datetime | None = None) -> str:
     if not (d := _d(v)):
         return "-"
     now = now or datetime.now()
-    fmt = "%H:%M" if d.date() == now.date() else "%m-%d %H:%M" if d.year == now.year else "%Y-%m-%d %H:%M"
+    fmt = "%m-%d %H:%M" if d.year == now.year else "%Y-%m-%d %H:%M"
     iso = escape(d.isoformat(timespec="seconds"))
     return Markup(f'<time datetime="{iso}" title="{iso}">{d:{fmt}}</time>')
 

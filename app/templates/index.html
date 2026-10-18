@@ -20,7 +20,7 @@
 <section class="card hero {{ tone }}" aria-label="크롤링 상태">
   <div class="hero-main">
     <div>
-      <p class="hero-title">{% if last or running %}<i></i>{% endif %}{{ title }}{% if running and last and last.status == "running" %} · 시작 {{ last.started|dt }}{% endif %}</p>
+      <p class="hero-title">{% if last or running %}<i></i>{% endif %}{{ title }}{% if running and last and last.status == "running" %} · 시작 {{ last.started|dt }} · {{ last.started|ago }}{% endif %}</p>
       {% if running %}<p class="hero-meta">10초마다 새로 고칩니다{% if last and last.status == "running" %} · <a href="/runs/{{ last.id }}">로그 보기 →</a>{% endif %}</p>
       {% elif last %}
       <p class="hero-meta">마지막 실행 #{{ last.id }} · {{ last.started|dt }} · {{ last.started|ago }}</p>
