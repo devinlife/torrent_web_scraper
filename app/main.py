@@ -18,6 +18,7 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.info("APP_ENV=%s dry_run=%s db=%s", config.APP_ENV, config.DRY_RUN, config.DB_PATH)
     conn = db.connect(config.DB_PATH)
     browser = Browser()
     await browser.start()
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(doctor.router)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.globals["APP_ENV"] = config.APP_ENV
 
 
 def go(path: str, error: str | None = None) -> RedirectResponse:

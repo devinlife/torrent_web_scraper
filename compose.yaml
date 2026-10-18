@@ -1,3 +1,5 @@
+# prod: http://127.0.0.1:8080, data in ./data/prod, adds magnets to Transmission. Control with ./server.sh prod ...
+name: torrent_web_scraper
 services:
   scraper:
     build: .
@@ -5,8 +7,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./data:/data
+      - ./data/prod:/data
     env_file: .env
+    environment:
+      APP_ENV: prod
     init: true
     shm_size: 1gb
     restart: unless-stopped

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}torrent{% endblock %} · torrent</title>
+<title>{% if APP_ENV == "dev" %}[dev] {% endif %}{% block title %}torrent{% endblock %} · torrent</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 960px; margin: 0 auto; padding: 0 16px 40px;
          color: #222; background: #fff; line-height: 1.4; }
@@ -38,7 +38,8 @@
 {% block head %}{% endblock %}
 </head>
 <body>
-<nav><a href="/">대시보드</a><a href="/programs">프로그램</a><a href="/sites">사이트</a></nav>
+<nav><a href="/">대시보드</a><a href="/programs">프로그램</a><a href="/sites">사이트</a>
+{% if APP_ENV == "dev" %}<span class="badge partial" title="Transmission 추가와 사이트 URL 변경을 하지 않는다">DEV · dry-run</span>{% endif %}</nav>
 {% block content %}{% endblock %}
 </body>
 </html>

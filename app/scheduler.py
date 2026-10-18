@@ -171,7 +171,7 @@ class Scheduler:
 
     async def _run(self) -> None:
         async with self._lock:
-            await run_once(self.conn, self.browser)
+            await run_once(self.conn, self.browser, dry_run=config.DRY_RUN)
 
     async def _loop(self) -> None:
         # Waits are capped at 60 s and the wall clock re-checked: asyncio's monotonic clock
@@ -200,7 +200,7 @@ async def _main() -> None:
     browser = Browser()
     await browser.start()
     try:
-        rid = await run_once(conn, browser, dry_run="--dry-run" in sys.argv)
+        rid = await run_once(conn, browser, dry_run=config.DRY_RUN or "--dry-run" in sys.argv)
         print(db.get_run(conn, rid)["log"])
     finally:
         await browser.stop()
