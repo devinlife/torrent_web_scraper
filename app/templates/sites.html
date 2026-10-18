@@ -49,8 +49,7 @@
   <div class="site-foot">
     <details class="editor">
       <summary class="btn btn-ghost" aria-label="{{ s.name }} 설정 수정"></summary>
-      <form class="editor-body" method="post" action="/sites/{{ s.id }}"
-            onsubmit='return confirm({{ (s.name ~ " 설정을 바꿀까요?")|tojson }})'>
+      <form class="editor-body" method="post" action="/sites/{{ s.id }}">
         <label class="field"><span>URL</span><input class="input" type="url" name="url" value="{{ s.url }}" required></label>
         <label class="field"><span>게시판 경로 (한 줄에 하나)</span>
           <textarea class="textarea" name="boards" rows="{{ s.boards|length + 1 }}">{{ s.boards|join("\n") }}</textarea></label>
