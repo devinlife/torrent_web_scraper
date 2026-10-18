@@ -56,3 +56,26 @@ def test_user_prompt_dates_crawl_lines(tmp_path):
     started = db.get_run(conn, rid)["started"]
     assert f"run started {started}:\n21:53:50 site {site['name']}: /b -> 20 posts" in p
     assert "site other" not in p and "now: " in p
+
+
+def test_dns_tls_notes_real_sni_failure(monkeypatch):
+    import contextlib
+    import socket
+    import ssl
+
+    class Ctx:
+        check_hostname, verify_mode = True, None
+
+        def wrap_socket(self, s, server_hostname):
+            if server_hostname == "a.com":
+                raise ConnectionResetError(54, "reset")
+            return contextlib.nullcontext(type("T", (), {"version": lambda self: "TLSv1.3"})())
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(socket.AF_INET, 0, 0, "", ("1.2.3.4", 443))])
+    class Sock(contextlib.nullcontext):
+        def close(self):
+            pass
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: Sock())
+    monkeypatch.setattr(ssl, "create_default_context", Ctx)
+    out = doctor._dns_tls("a.com")
+    assert out[-3].startswith("tls sni=a.com: FAIL") and out[-2] == "tls sni=www.google.com: ok TLSv1.3"
+    assert out[-1].startswith("note: this stdlib TLS probe cannot use ECH")

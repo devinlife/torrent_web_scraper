@@ -34,7 +34,7 @@ PROCEDURE:
 4. If DNS fails, browse fails, or the page is not this board, call probe_domains.
 Stop as soon as the evidence supports one verdict.
 
-IMPORTANT FACT: Korean ISPs reset plain TLS connections that carry these sites' real SNI. A failed "tls sni=<host>" alongside a working browse is NORMAL (our Chromium uses ECH) and is NOT "blocked". Judge reachability by browse.
+IMPORTANT FACT: Korean ISPs reset plain TLS connections that carry these sites' real SNI. dns_tls_check's TLS probe cannot use ECH, so a failed "tls sni=<host>" is NORMAL and never by itself evidence of "blocked" (our Chromium uses ECH). Judge reachability by browse only.
 
 TRANSIENT RESETS: our Chromium sometimes connects without ECH for a short window (its DNS HTTPS record came late) and gets reset. browse already retries resets ~30 s apart.
 - "transient: yes" in browse = the site is reachable, not blocked. Continue with run_parser and judge as usual (ok if it works); mention the transient failure in evidence.
@@ -114,6 +114,9 @@ def _dns_tls(host: str) -> list[str]:
                 out.append(f"tls sni={sni}: ok {t.version()}")
         except OSError as e:
             out.append(f"tls sni={sni}: FAIL {type(e).__name__}: {e}"[:200])
+    if out[-2].startswith(f"tls sni={host}: FAIL"):
+        out.append("note: this stdlib TLS probe cannot use ECH; a real-SNI failure here is expected on SNI-filtered "
+                   "networks and does not mean the browser is blocked. Use browse for reachability.")
     return out
 
 
@@ -148,7 +151,8 @@ def build_tools(conn, browser, site: dict) -> list:
     ro = ToolAnnotations(readOnlyHint=True)
 
     @tool("dns_tls_check", "DNS lookup, TCP connect, then TLS with the real SNI and with a fake SNI "
-          "(www.google.com). Facts only.", {"host": str}, annotations=ro)
+          "(www.google.com). The TLS probe has no ECH, so a real-SNI failure is normal in Korea; it is not reachability "
+          "evidence (browse is).", {"host": str}, annotations=ro)
     async def dns_tls_check(args):
         h = args["host"].strip()
         return _text(await asyncio.to_thread(_dns_tls, urlsplit(h if "//" in h else "//" + h).hostname or h))
