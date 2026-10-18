@@ -60,15 +60,24 @@ async def validation_error(request: Request, exc: RequestValidationError):
     return page(request, "error.html", 422, code=422, message="입력값이 올바르지 않습니다.")
 
 
+def stale_before(conn) -> str:
+    """A site with no success since this time (3 intervals ago) is flagged."""
+    stale = datetime.now() - timedelta(minutes=3 * int(db.get_setting(conn, "interval_min", "60")))
+    return stale.isoformat(timespec="seconds")
+
+
 # dashboard
 @app.get("/")
 async def index(request: Request, msg: str | None = None):
     conn, sched = request.app.state.db, request.app.state.scheduler
-    nxt = sched.next_run_at
-    return page(request, "index.html", next_run_at=nxt, running=sched.running,
-                due=bool(nxt and nxt <= datetime.now()),
-                interval_min=db.get_setting(conn, "interval_min", "60"), msg=msg,
-                runs=db.list_runs(conn, 10), downloads=db.list_downloads(conn, 20))
+    nxt, now = sched.next_run_at, datetime.now()
+    sites, cut = db.list_sites(conn, enabled_only=True), stale_before(conn)
+    stale = [] if config.APP_ENV == "dev" else [s for s in sites if (s["last_ok_at"] or "") < cut]  # dev never sets it
+    return page(request, "index.html", next_run_at=nxt, running=sched.running or msg == "started",
+                due=bool(nxt and nxt <= now), interval_min=db.get_setting(conn, "interval_min", "60"), msg=msg,
+                runs=db.list_runs(conn, 10), downloads=db.list_downloads(conn, 20),
+                day_ago=(now - timedelta(days=1)).isoformat(timespec="seconds"),
+                sites=sites, stale_sites=stale, programs=db.list_programs(conn))
 
 
 @app.post("/run-now")
@@ -80,7 +89,7 @@ async def run_now(request: Request):
 @app.post("/settings/interval")
 async def set_interval(request: Request, minutes: int = Form(ge=1, le=1440)):
     request.app.state.scheduler.set_interval(minutes)
-    return go("/")
+    return go("/", msg="interval")
 
 
 @app.post("/settings/doctor-model")
@@ -130,9 +139,8 @@ async def program_delete(request: Request, id: int):
 @app.get("/sites")
 async def sites(request: Request, error: str | None = None, msg: str | None = None):
     conn = request.app.state.db
-    stale = datetime.now() - timedelta(minutes=3 * int(db.get_setting(conn, "interval_min", "60")))
     return page(request, "sites.html", sites=db.list_sites(conn), reports=db.latest_doctor_report_per_site(conn),
-                stale_before=stale.isoformat(timespec="seconds"),
+                stale_before=stale_before(conn),
                 doctor_model=db.get_setting(conn, "doctor_model", "sonnet"), error=error, msg=msg)
 
 

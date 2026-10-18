@@ -1,48 +1,87 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge %}
+{% from "_macros.html" import badge, flash %}
 {% block title %}대시보드{% endblock %}
-{% block head %}{% if running or msg == "started" %}<meta http-equiv="refresh" content="10; url=/">{% endif %}{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="{{ 10 if running else 60 }}; url=/">{% endblock %}
 {% block content %}
-<h1>대시보드</h1>
-{% if msg == "already-running" %}<p class="flash info">이미 실행 중입니다.</p>{% endif %}
-{% if msg == "started" %}<p class="flash info">실행을 시작했습니다.</p>{% endif %}
-{% if APP_ENV == "dev" %}<p class="muted">dry-run: Transmission 추가와 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다.</p>{% endif %}
+<div class="page-head">
+  <div><h1>대시보드</h1><p class="sub">{{ interval_min }}분마다 자동으로 확인합니다</p></div>
+  <div class="actions"><form method="post" action="/run-now"><button class="btn btn-primary"><span aria-hidden="true">▶</span> 지금 실행</button></form></div>
+</div>
+{{ flash(msg=msg, n=interval_min) }}
+
 {% set last = runs[0] if runs else none %}
-{% if last %}<p>
-  {{ badge(last.status) }} 마지막 실행 #{{ last.id }} · {{ last.started|dt }} ({{ last.started|ago }})
-  · 매칭 {{ last.matched }} · 추가 {{ last.added }} · <a href="/runs/{{ last.id }}">로그</a>
-  {% if last.status in ("error", "partial") %} · <a href="/sites">사이트 확인 →</a>{% endif %}
-</p>{% endif %}
-<p>
-  {% if running %}다음 실행 <strong>실행 중</strong>
-  {% elif due %}다음 실행 <strong>곧 실행</strong>
-  {% else %}다음 실행 <strong>{{ next_run_at|dt }}</strong> ({{ next_run_at|ago }}){% endif %}
-  · {{ interval_min }}분마다
-</p>
-<form class="row" method="post" action="/settings/interval">
-  <label>주기(분) <input type="number" name="minutes" min="1" max="1440" required value="{{ interval_min }}"></label>
-  <button>저장</button>
-</form>
-<form class="row" method="post" action="/run-now"><button class="primary">지금 실행</button></form>
+{% if running %}{% set tone, title = "is-run", "실행 중" %}
+{% elif not last %}{% set tone, title = "is-none", "아직 실행하지 않았습니다" %}
+{% elif last.status == "error" %}{% set tone, title = "is-bad", "실패" %}
+{% elif last.status == "partial" %}{% set tone, title = "is-warn", "일부 실패" %}
+{% elif stale_sites %}{% set tone, title = "is-warn", "정상 · 사이트 " ~ stale_sites|length ~ "곳 응답 없음" %}
+{% else %}{% set tone, title = "is-ok", "정상" %}{% endif %}
+<section class="card hero {{ tone }}" aria-label="크롤링 상태">
+  <div class="hero-main">
+    <div>
+      <p class="hero-title">{% if last or running %}<i></i>{% endif %}{{ title }}{% if running and last and last.status == "running" %} · 시작 {{ last.started|dt }}{% endif %}</p>
+      {% if running %}<p class="hero-meta">10초마다 새로 고칩니다{% if last and last.status == "running" %} · <a href="/runs/{{ last.id }}">로그 보기 →</a>{% endif %}</p>
+      {% elif last %}
+      <p class="hero-meta">마지막 실행 #{{ last.id }} · {{ last.started|dt }} · {{ last.started|ago }}</p>
+      <p class="hero-meta">매칭 {{ last.matched }} · 추가 {{ last.added }} · {{ last.started|dur(last.finished) }} · <a href="/runs/{{ last.id }}">로그 보기 →</a>
+        {%- if tone in ("is-bad", "is-warn") %} · <a href="/sites">사이트 확인 →</a>{% endif %}</p>
+      {% else %}<p class="hero-meta">지금 실행을 누르면 바로 확인합니다.</p>{% endif %}
+    </div>
+    <div class="hero-side">
+      <p class="label">다음 실행</p>
+      <p class="value">{% if running %}실행 중{% elif due %}곧 실행{% else %}{{ next_run_at|dt }} · {{ next_run_at|ago }}{% endif %}</p>
+    </div>
+  </div>
+  <form class="form-row keep hero-foot" method="post" action="/settings/interval">
+    <label class="label-inline" for="interval">주기</label>
+    <input class="input" id="interval" type="number" name="minutes" min="1" max="1440" required value="{{ interval_min }}">
+    <span class="unit">분</span>
+    <button class="btn btn-secondary">저장</button>
+  </form>
+</section>
 
-<h2>최근 실행</h2>
-<div class="table"><table>
-  <tr><th class="num">#</th><th>시작</th><th>소요</th><th>상태</th><th class="num">매칭</th><th class="num">추가</th></tr>
-  {% for r in runs %}
-  <tr>
-    <td class="num"><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.started|dt }}</td><td>{{ r.started|dur(r.finished) }}</td>
-    <td>{{ badge(r.status) }}</td><td class="num">{{ r.matched }}</td>
-    <td class="num">{% if r.added %}<strong>{{ r.added }}</strong>{% else %}0{% endif %}</td>
-  </tr>
-  {% else %}<tr><td colspan="6" class="muted">아직 없음</td></tr>{% endfor %}
-</table></div>
+{% set n_runs = runs|length %}{% set n_ok = runs|selectattr("status", "eq", "ok")|list|length %}
+{% set n_day = downloads|selectattr("added_at", "ge", day_ago)|list|length %}
+{% set n_sites = sites|length %}{% set n_sites_ok = n_sites - stale_sites|length %}
+<dl class="stats">
+  <div class="stat"><dt>24시간 추가</dt>
+    <dd class="value">{{ "20+" if n_day >= 20 else n_day }}</dd>
+    <dd class="hint">{{ "dev는 기록하지 않음" if APP_ENV == "dev" else "최근 20건 기준" }}</dd></div>
+  <div class="stat {{ 'is-bad' if n_runs and not n_ok else 'is-warn' if n_ok < 0.8 * n_runs }}"><dt>최근 실행</dt>
+    {% if n_runs %}<dd class="value">{{ n_ok }}/{{ n_runs }}<small>정상</small></dd><dd class="hint">최근 {{ n_runs }}회</dd>
+    {% else %}<dd class="value">-</dd><dd class="hint">기록 없음</dd>{% endif %}</div>
+  <div class="stat {{ 'is-bad' if n_sites and not n_sites_ok else 'is-warn' if stale_sites }}"><dt><a href="/sites">사이트</a></dt>
+    {% if APP_ENV == "dev" %}<dd class="value">{{ n_sites }}<small>곳 켜짐</small></dd><dd class="hint">dev는 집계하지 않음</dd>
+    {% else %}<dd class="value">{{ n_sites_ok }}/{{ n_sites }}<small>정상</small></dd><dd class="hint">켜진 사이트</dd>{% endif %}</div>
+  <div class="stat"><dt><a href="/programs">프로그램</a></dt>
+    <dd class="value">{{ programs|selectattr("enabled")|list|length }}<small>켜짐</small></dd>
+    <dd class="hint">전체 {{ programs|length }}</dd></div>
+</dl>
 
-<h2>다운로드 이력</h2>
-<div class="table"><table>
-  <tr><th>추가 시각</th><th>프로그램</th><th>회차</th><th>제목</th><th>사이트</th></tr>
-  {% for d in downloads %}
-  <tr><td>{{ d.added_at|dt }}</td><td>{{ d.program_name or "-" }}</td><td>{{ d.episode or "-" }}</td>
-      <td>{{ d.title }}</td><td>{{ d.site }}</td></tr>
-  {% else %}<tr><td colspan="5" class="muted">아직 없음{% if APP_ENV == "dev" %} (dev는 기록하지 않음){% endif %}</td></tr>{% endfor %}
-</table></div>
+<section class="card section">
+  <header class="card-head"><h2>최근 실행</h2></header>
+  {% if runs %}<div class="table-wrap"><table class="table">
+    <thead><tr><th class="num">#</th><th>시작</th><th class="hide-sm">소요</th><th>상태</th><th class="num hide-sm">매칭</th><th class="num">추가</th></tr></thead>
+    <tbody>{% for r in runs %}
+    <tr><td class="num"><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.started|dt }}</td>
+      <td class="hide-sm">{{ r.started|dur(r.finished) }}</td><td>{{ badge(r.status) }}</td>
+      <td class="num hide-sm">{{ r.matched }}</td><td class="num{{ ' pos' if r.added }}">{{ r.added }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty"><p class="empty-title">아직 실행 기록이 없습니다</p><p class="muted">지금 실행을 누르거나 다음 실행을 기다리세요.</p></div>{% endif %}
+</section>
+
+<section class="card">
+  <header class="card-head"><h2>다운로드</h2></header>
+  {% if downloads %}<div class="table-wrap"><table class="table">
+    <thead><tr><th>추가 시각</th><th>프로그램</th><th>회차</th><th class="hide-sm">제목</th><th class="hide-sm">사이트</th></tr></thead>
+    <tbody>{% for d in downloads %}
+    <tr><td>{{ d.added_at|dt }}</td>
+      <td>{{ d.program_name or "-" }}<span class="show-sm sub truncate" title="{{ d.title }}">{{ d.title }}</span></td>
+      <td>{{ d.episode or "-" }}</td><td class="truncate hide-sm" title="{{ d.title }}">{{ d.title }}</td><td class="hide-sm">{{ d.site }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty"><p class="empty-title">아직 받은 회차가 없습니다</p>
+    <p class="muted">{{ "dev는 다운로드를 기록하지 않습니다." if APP_ENV == "dev" else "새 회차가 올라오면 여기에 나옵니다." }}</p></div>{% endif %}
+</section>
 {% endblock %}

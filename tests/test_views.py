@@ -25,3 +25,10 @@ def test_dur():
     assert dur("2026-10-18T19:23:10", "2026-10-18T19:35:40") == "12분 30초"
     assert dur("2026-10-18T19:23:10", "2026-10-18T19:23:55") == "45초"
     assert dur("2026-10-18T19:23:10", None) == "실행 중"
+
+
+def test_go():
+    from app.views import go
+    assert go("/").headers["location"] == "/"
+    assert go("/", msg="interval").headers["location"] == "/?msg=interval"
+    assert go("/p", "이미 있음 & x").headers["location"] == "/p?error=%EC%9D%B4%EB%AF%B8+%EC%9E%88%EC%9D%8C+%26+x"

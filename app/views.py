@@ -1,7 +1,7 @@
 """The one Jinja environment both main.py and doctor.py render with: globals, filters, redirect helper."""
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -12,6 +12,11 @@ from app import config
 LABEL = {"ok": "정상", "partial": "일부 실패", "error": "실패", "running": "실행 중", "done": "완료",
          "domain_moved": "도메인 이전", "blocked": "차단", "site_down": "사이트 다운",
          "cloudflare": "CF 인증 필요", "parser_broken": "파서 고장"}
+# ?msg= flash texts: (flash-<kind>, text); {n} is filled by the page (e.g. interval minutes).
+FLASH = {"started": ("info", "실행을 시작했습니다. 끝나면 결과가 여기에 나옵니다."),
+         "already-running": ("info", "이미 실행 중입니다."),
+         "interval": ("ok", "주기를 {n}분으로 바꿨습니다."),
+         "applied": ("ok", "설정을 바꿨습니다. 다음 실행에서 확인됩니다.")}
 
 
 def _d(v) -> datetime | None:
@@ -49,10 +54,11 @@ def dur(start, end) -> str:
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 CSS_V = int((HERE / "static" / "app.css").stat().st_mtime)  # cache-buster; uvicorn --reload watches *.py only
-templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, CSS_V=CSS_V)
+templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, FLASH=FLASH, CSS_V=CSS_V)
 templates.env.filters.update(dt=dt, ago=ago, dur=dur)
 templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}  # readable confirm() text
 
 
-def go(path: str, error: str | None = None) -> RedirectResponse:
-    return RedirectResponse(path + (f"?error={quote(error)}" if error else ""), status_code=303)
+def go(path: str, error: str | None = None, msg: str | None = None) -> RedirectResponse:
+    q = urlencode({k: v for k, v in (("error", error), ("msg", msg)) if v})
+    return RedirectResponse(path + (f"?{q}" if q else ""), status_code=303)
