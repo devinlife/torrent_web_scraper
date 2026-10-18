@@ -44,3 +44,15 @@ def test_browse_retries_resets_spaced(monkeypatch):
     text = asyncio.run(browse.handler({"url": "https://a.com/b"}))["content"][0]["text"]
     assert "attempts: 1 ERR_CONNECTION_CLOSED, 2 ERR_CONNECTION_CLOSED, 3 status 200" in text
     assert "transient: yes" in text and "status: 200" in text and sleeps == [5, 10]
+
+
+def test_user_prompt_dates_crawl_lines(tmp_path):
+    from app import db
+    conn = db.connect(tmp_path / "app.db")
+    site = db.list_sites(conn)[0]
+    rid = db.create_run(conn)
+    db.finish_run(conn, rid, "done", 0, 0, f"21:53:50 site {site['name']}: /b -> 20 posts\n21:53:51 site other: x")
+    p = doctor._user_prompt(conn, site)
+    started = db.get_run(conn, rid)["started"]
+    assert f"run started {started}:\n21:53:50 site {site['name']}: /b -> 20 posts" in p
+    assert "site other" not in p and "now: " in p

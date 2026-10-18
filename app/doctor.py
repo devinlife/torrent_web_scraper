@@ -36,11 +36,15 @@ Stop as soon as the evidence supports one verdict.
 
 IMPORTANT FACT: Korean ISPs reset plain TLS connections that carry these sites' real SNI. A failed "tls sni=<host>" alongside a working browse is NORMAL (our Chromium uses ECH) and is NOT "blocked". Judge reachability by browse.
 
+TRANSIENT RESETS: our Chromium sometimes connects without ECH for a short window (its DNS HTTPS record came late) and gets reset. browse already retries resets ~30 s apart.
+- "transient: yes" in browse = the site is reachable, not blocked. Continue with run_parser and judge as usual (ok if it works); mention the transient failure in evidence.
+- If the crawler log shows posts for this site in the last few hours (compare run start times with "now") and only browse fails, call browse once more. If it still fails, say in summary it is likely a temporary ECH/DNS fallback, not a lasting block.
+
 VERDICTS:
 - ok: run_parser finds posts and extracts a magnet hash.
 - domain_moved: the configured domain no longer serves the board (DNS failure, parked page, redirect elsewhere) and/or probe_domains finds a working +N domain.
-- blocked: DNS resolves but browse fails with ERR_CONNECTION_CLOSED/RESET, or lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해").
-- site_down: TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- blocked: browse lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해"), or browse fails with ERR_CONNECTION_CLOSED/RESET on every attempt AND the crawler log shows no recent success.
+- site_down: TCP connect fails or times out, HTTP 5xx / Cloudflare 52x error pages, or resets persist although the crawler succeeded recently (temporarily unreachable).
 - cloudflare: browse shows a Cloudflare challenge (cloudflare_challenge: yes, often 403/503).
 - parser_broken: browse returns the real board with visible posts, but run_parser finds 0 posts or no magnet.
 If probe_domains marks a candidate "<- works", the verdict is domain_moved even when the configured domain looks blocked or down, and suggested_fix.url is that candidate.
@@ -212,9 +216,12 @@ def build_tools(conn, browser, site: dict) -> list:
 
 def _user_prompt(conn, site: dict) -> str:
     tag = f"site {site['name']}:"
-    lines = [ln for run in reversed(db.list_runs(conn, 3)) for ln in run["log"].splitlines() if tag in ln][-30:]
+    lines = []  # log lines carry only HH:MM:SS, so each run's start date goes in front
+    for run in reversed(db.list_runs(conn, 3)):
+        if hits := [ln for ln in run["log"].splitlines() if tag in ln]:
+            lines += [f"run started {run['started']}:", *hits[-10:]]
     return (f"Site: {site['name']}\nbase_url: {site['url']}\nboards: {json.dumps(site['boards'])}\n"
-            f"last_ok_at: {site['last_ok_at'] or 'never'}\nRecent crawler log lines for this site:\n"
+            f"now: {db.now()}\nlast_ok_at: {site['last_ok_at'] or 'never'}\nRecent crawler log lines for this site:\n"
             + ("\n".join(lines) or "(none)"))
 
 
