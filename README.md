@@ -5,11 +5,11 @@
 ```
 Mac (OrbStack)
 └─ Docker container  ─  FastAPI + uvicorn (process 1개)
-   ├─ Web UI (127.0.0.1:8080)
+   ├─ Web UI (prod 127.0.0.1:8080, dev 127.0.0.1:8081)
    ├─ Scheduler (asyncio, 주기는 런타임에 변경 가능)
    ├─ Crawler ── Playwright Chromium (--headless=new, ECH) ──→ 토렌트 사이트 3곳
    ├─ Doctor ─── Claude Agent SDK + 전용 진단 도구
-   ├─ SQLite (/data/app.db, 호스트 ./data에 보존)
+   ├─ SQLite (/data/app.db, 호스트 ./data/<env>에 보존)
    └─ Transmission RPC ──→ Pi 192.168.0.10:59090
 ```
 
@@ -27,10 +27,44 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 | `TRANSMISSION_URL` | Pi RPC 주소. 예: `http://192.168.0.10:59090/transmission/rpc` |
 | `TRANSMISSION_USER`, `TRANSMISSION_PASSWORD` | Transmission RPC 계정 |
 
-2. `docker compose up -d --build`
+2. `./server.sh prod up`
 3. 브라우저에서 `http://127.0.0.1:8080`에 접속한다. 인증이 없으므로 이 Mac에서만 열린다.
 
-`restart: unless-stopped`이므로 OrbStack이 다시 켜지면 컨테이너도 자동으로 뜬다.
+## 서버 구동
+
+서버는 dev와 prod 두 가지이고, 둘 다 Mac의 Docker에서 돈다. 각각 별도의 compose 프로젝트, 포트, DB를 쓰므로 동시에 띄워도 서로 영향이 없다.
+
+| | dev | prod |
+|---|---|---|
+| 주소 | http://127.0.0.1:8081 | http://127.0.0.1:8080 |
+| compose 파일 | `compose.dev.yaml` (프로젝트 `torrent_web_scraper-dev`) | `compose.yaml` (프로젝트 `torrent_web_scraper`) |
+| DB | `./data/dev/app.db` | `./data/prod/app.db` |
+| 크롤링 | 모든 실행이 dry-run. Transmission 추가, 다운로드 기록, 사이트 URL 변경, `last_ok_at` 갱신을 하지 않는다 | Transmission에 실제로 추가한다 |
+| 코드 반영 | `./app`을 마운트하고 `uvicorn --reload`로 저장 즉시 재시작 | 이미지에 굽는다. 코드를 바꾸면 `up`으로 재빌드 |
+| 재부팅 | 자동으로 뜨지 않는다 | `restart: unless-stopped`이라 OrbStack이 켜지면 자동으로 뜬다 |
+| 화면 표시 | 상단에 `DEV · dry-run` 배지, 탭 제목에 `[dev]` | 표시 없음 |
+
+### 명령
+
+```sh
+./server.sh <dev|prod> <command>
+```
+
+| 명령 | 동작 |
+|---|---|
+| `up` | 이미지를 빌드하고 백그라운드로 띄운다 |
+| `down` | 컨테이너를 내린다. DB는 남는다 |
+| `restart` | 컨테이너를 재시작한다(재빌드 없음) |
+| `reset` | 내리고 DB를 지운 뒤 다시 띄운다. 시드 데이터로 새로 시작한다. prod는 `prod`를 입력해야 진행한다 |
+| `logs` | 로그를 따라 본다 |
+| `ps` | 컨테이너 상태를 본다 |
+| `dry-run` | 크롤링을 한 번 실행하고 로그를 출력한다. Transmission 추가와 URL 변경은 하지 않는다 |
+
+새 DB로 시작하면 첫 크롤링이 바로 돈다. prod를 `reset`하면 다운로드 기록이 사라지므로 게시판 첫 페이지에 남은 회차를 다시 추가하려 한다(이미 Transmission에 있는 토렌트는 `duplicate`로 기록된다).
+
+### 환경 구분
+
+환경은 `APP_ENV`(`dev` | `prod`) 하나로 정하고, compose 파일이 값을 넣는다. 다른 값이면 앱이 시작하지 않는다. 값이 없으면 `dev`로 본다. 설정이 빠졌을 때 실제 다운로드가 일어나지 않게 하기 위해서다. `app/config.py`가 `APP_ENV`에서 `DRY_RUN`을 정하고, 스케줄러와 `python -m app.scheduler`가 그 값을 따른다. 비밀값은 두 환경이 같은 `.env`를 쓴다.
 
 **macOS 로컬 네트워크 권한**: 컨테이너가 LAN의 Pi에 닿으려면 시스템 설정 → 개인정보 보호 및 보안 → 로컬 네트워크에서 OrbStack을 켜고 OrbStack을 재시작해야 한다. 꺼져 있으면 실행 기록에 `transmission FAIL ... timed out`이 남고 상태가 `partial`이 된다. 이때 다운로드는 기록되지 않으므로 다음 실행에서 다시 시도한다.
 
@@ -78,7 +112,7 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 
 ## 데이터
 
-`./data/app.db`(SQLite, 컨테이너의 `/data`). 테이블은 6개다.
+`./data/<env>/app.db`(SQLite, 컨테이너의 `/data`). 테이블은 6개다.
 
 | 테이블 | 내용 |
 |---|---|
@@ -98,12 +132,12 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 
 ```sh
 uv sync
-uv run pytest -q                                                     # 네트워크 없이 fixture로 테스트
-docker compose run --rm scraper python -m app.scheduler --dry-run   # 실제 크롤링, Transmission 추가는 안 함
-docker compose logs -f
+uv run pytest -q          # 네트워크 없이 fixture로 테스트
+./server.sh dev up        # 코드 수정은 ./app 저장만으로 반영된다
+./server.sh dev logs
 ```
 
-dry-run은 Transmission 추가와 사이트 URL 변경을 하지 않지만 실행 기록은 남기므로, 다음 정기 실행 시각이 그만큼 뒤로 밀린다. 스케줄에 맞춰 돌아야 할 때는 실행하지 않는다.
+prod에서 `dry-run`을 실행하면 실행 기록이 prod DB에 남으므로 다음 정기 실행 시각이 그만큼 뒤로 밀린다. 크롤링을 확인할 때는 dev를 쓴다.
 
 ## 범위 밖
 

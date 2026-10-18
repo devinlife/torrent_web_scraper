@@ -23,7 +23,7 @@ Mac의 Docker에서 실행되는 웹 서비스입니다. 등록한 TV 프로그�
 ```
 Mac (OrbStack)
 └─ Docker container  ─  FastAPI + uvicorn (process 1개)
-   ├─ Web UI (127.0.0.1:8080)
+   ├─ Web UI (prod 127.0.0.1:8080, dev 127.0.0.1:8081)
    ├─ Scheduler (asyncio, 주기는 런타임에 변경 가능)
    ├─ Crawler ── Playwright Chromium (--headless=new, ECH) ──→ 토렌트 사이트 3곳
    ├─ Doctor ─── Claude Agent SDK + 전용 진단 도구
@@ -127,11 +127,12 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 
 ## 9. 배포와 운영
 
-- 배포는 `.env`를 준비한 뒤 `docker compose up -d --build` 한 줄입니다. OrbStack이 실행되면 컨테이너도 자동으로 시작됩니다(`restart: unless-stopped`).
+- 서버는 dev와 prod 두 가지이고, `APP_ENV`로 구분합니다. dev(127.0.0.1:8081)는 모든 크롤링을 dry-run으로 돌려 Transmission에 아무것도 추가하지 않고, 코드 저장 즉시 재시작합니다. prod(127.0.0.1:8080)만 실제로 다운로드합니다. 두 서버는 compose 프로젝트와 DB(`./data/dev`, `./data/prod`)가 따로라서 동시에 띄울 수 있습니다.
+- 배포는 `.env`를 준비한 뒤 `./server.sh prod up` 한 줄입니다. `./server.sh <dev|prod> <up|down|restart|reset|logs|ps|dry-run>`으로 각 서버를 제어합니다. prod는 OrbStack이 실행되면 자동으로 시작됩니다(`restart: unless-stopped`).
 - 베이스 이미지는 `mcr.microsoft.com/playwright/python:v1.48.0-noble`입니다. 의존성은 uv로 관리합니다(`pyproject.toml`, `uv.lock`).
 - Mac이 잠자는 동안에는 크롤링하지 않습니다. 스케줄러가 60초마다 실제 시각을 다시 확인하므로, 깨어난 뒤 예정 시각이 지났으면 1분 안에 실행합니다.
 - 컨테이너가 LAN의 Pi에 닿으려면 macOS 로컬 네트워크 권한에서 OrbStack을 허용해야 합니다. 꺼져 있으면 실행 기록에 `transmission FAIL ... timed out`이 남고 상태가 `partial`이 됩니다.
-- 웹 UI는 인증이 없으므로 이 Mac(127.0.0.1:8080)에서만 열립니다.
+- 웹 UI는 인증이 없으므로 이 Mac(127.0.0.1)에서만 열립니다.
 
 ## 10. 범위 밖
 

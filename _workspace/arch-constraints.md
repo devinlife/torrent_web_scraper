@@ -14,7 +14,7 @@
 
 | 파일 | 책임 | 의존 |
 |---|---|---|
-| `app/config.py` | 환경변수 읽기(`DATA_DIR`, `TRANSMISSION_*`), 상수 | 없음 |
+| `app/config.py` | 환경변수 읽기(`APP_ENV`, `DATA_DIR`, `TRANSMISSION_*`), 상수. `APP_ENV`(`dev` 기본 / `prod`)에서 `DRY_RUN`을 정한다 | 없음 |
 | `app/db.py` | `sqlite3` 연결, DDL(`CREATE TABLE IF NOT EXISTS`), 시드, 얇은 쿼리 함수, 사이트 입력 검증(`URL_RE`, `BOARD_RE`, `MODELS`, `clean_site_fields`; 웹 폼과 Doctor [적용]이 공유) | 없음(경로는 호출자가 `config.DB_PATH`로 넘김) |
 | `app/browser.py` | Playwright Chromium(`--headless=new`) 1개 인스턴스, `asyncio.Lock`으로 동시 1개 보장, `fetch(url, *, timeout_ms, retries) -> FetchResult(status, final_url, html, error)`. 페이지 이동(navigation) 실패로 예외를 던지지 않음 | 없음 |
 | `app/crawler.py` | **순수 함수**: 게시판 HTML→(제목, href) 목록, 제목 매칭, 회차 키 추출, 상세 HTML→magnet/해시 정규화, 도메인 번호 탐색 후보 생성. I/O 없음 | 없음 |
@@ -34,7 +34,7 @@
 ## 3. 핵심 흐름 `run_once()`
 
 1. `runs` 행 생성(status=`running`).
-2. 켜진 사이트 × 게시판(boards)마다 `browser.fetch(url + board)`(재시도 2회). 첫 게시판이 실패하거나 글이 0개면 도메인 번호 +1..+5 탐색(`crawler.domain_candidates`, 후보마다 `retries=1`). 글이 나오는 후보를 찾으면 옮기기 전에 원래 URL을 한 번 더 받아 본다(실측된 일시 오류로 미러에 옮겨가지 않도록). 여전히 실패할 때만 `sites.url` 갱신하고 로그에 남김. 첫 게시판이 다른 도메인으로 리다이렉트되면 그 도메인으로 갱신. dry-run은 실행 기록만 남기고 DB의 다른 것은 바꾸지 않는다.
+2. 켜진 사이트 × 게시판(boards)마다 `browser.fetch(url + board)`(재시도 2회). 첫 게시판이 실패하거나 글이 0개면 도메인 번호 +1..+5 탐색(`crawler.domain_candidates`, 후보마다 `retries=1`). 글이 나오는 후보를 찾으면 옮기기 전에 원래 URL을 한 번 더 받아 본다(실측된 일시 오류로 미러에 옮겨가지 않도록). 여전히 실패할 때만 `sites.url` 갱신하고 로그에 남김. 첫 게시판이 다른 도메인으로 리다이렉트되면 그 도메인으로 갱신. dry-run은 실행 기록만 남기고 DB의 다른 것은 바꾸지 않는다. dev 서버(`APP_ENV=dev`)는 모든 실행이 dry-run이다.
 3. `crawler.parse_board(html, base_url)` → `[(title, abs_href)]`.
 4. 켜진 프로그램마다 `crawler.match(title, program)`: 프로그램 이름의 모든 단어(공백 분리, 대소문자 무시)가 제목에 포함 AND 해상도 일치(`any`면 통과). 첫 매칭 프로그램 1개만.
 5. 매칭된 게시글의 회차 키 `crawler.episode_key(title)`로 `downloads`에 `(program_id, episode)`가 이미 있으면 **상세 페이지 접속 없이** 건너뛴다(브라우저 호출 절약).
@@ -82,5 +82,5 @@
 ## 7. 테스트와 검증
 
 - 단위 테스트는 네트워크 없이 `tests/fixtures/`의 실제 HTML로. `uv run pytest`가 Mac에서 바로 돌아야 한다.
-- 통합 검증은 `docker compose up`한 컨테이너에 대해 수행: 사이트 3곳 크롤 → Transmission `torrent-add` 왕복(새 회차가 없으면 `duplicate` 응답으로 확인) → Doctor 판정 4종(`ok`, `blocked`(torrenttop226.com 등 차단 사이트), `domain_moved`, `parser_broken`).
+- 크롤링 확인은 dev 서버(`./server.sh dev up`)로 한다. Transmission 왕복과 실제 추가 검증은 prod 서버(`./server.sh prod up`)에 대해 수행: 사이트 3곳 크롤 → Transmission `torrent-add` 왕복(새 회차가 없으면 `duplicate` 응답으로 확인) → Doctor 판정 4종(`ok`, `blocked`(torrenttop226.com 등 차단 사이트), `domain_moved`, `parser_broken`).
 - 비밀값은 로그·리포트·커밋에 절대 넣지 않는다.

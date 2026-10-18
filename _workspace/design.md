@@ -12,13 +12,29 @@ Global rules (everyone):
 
 ### app/config.py
 ```python
-DATA_DIR: Path = Path(os.environ.get("DATA_DIR", "./data"))
+APP_ENV: str = os.environ.get("APP_ENV", "dev")       # "dev" | "prod"; anything else raises RuntimeError at import
+DRY_RUN: bool = APP_ENV != "prod"
+DATA_DIR: Path = Path(os.environ.get("DATA_DIR", "./data/dev"))
 DB_PATH: Path = DATA_DIR / "app.db"
 TRANSMISSION_URL: str = os.environ.get("TRANSMISSION_URL", "")
 TRANSMISSION_USER: str = os.environ.get("TRANSMISSION_USER", "")
 TRANSMISSION_PASSWORD: str = os.environ.get("TRANSMISSION_PASSWORD", "")
 ```
-`main.py` holds the single `logging.basicConfig(level=logging.INFO)` line.
+`main.py` holds the single `logging.basicConfig(level=logging.INFO)` line and logs `APP_ENV=… dry_run=… db=…` at startup. An unset `APP_ENV` means `dev`, so a missing setting never downloads.
+
+Environments. Both run in Docker on the Mac from the same image build and share `.env`; `server.sh <dev|prod> <cmd>` wraps `docker compose -f <file>`.
+
+| | dev | prod |
+|---|---|---|
+| compose file / project | `compose.dev.yaml` / `torrent_web_scraper-dev` | `compose.yaml` / `torrent_web_scraper` |
+| `APP_ENV` | `dev` (every scheduled run and `python -m app.scheduler` is a dry run) | `prod` |
+| port | `127.0.0.1:8081` | `127.0.0.1:8080` |
+| data volume | `./data/dev:/data` | `./data/prod:/data` |
+| code | `./app:/app/app` bind mount, `uvicorn --reload --reload-dir app` | baked into the image |
+| restart | none | `unless-stopped` |
+| UI | `DEV · dry-run` badge in the nav, `[dev]` title prefix (`APP_ENV` is a Jinja global in both template environments) | — |
+
+`server.sh` commands: `up` (`up -d --build`), `down`, `restart`, `reset` (down, delete `app.db` and its WAL/SHM, up; prod asks to type `prod`), `logs`, `ps`, `dry-run` (`run --rm scraper python -m app.scheduler --dry-run`).
 
 ### app/crawler.py: pure functions, no I/O
 ```python
@@ -135,11 +151,11 @@ class Scheduler:
     @property
     def running(self) -> bool                 # self._lock.locked()
     next_run_at: datetime | None              # recomputed each loop tick
-    async def _run(self) -> None              # async with self._lock: await run_once(self.conn, self.browser)
+    async def _run(self) -> None              # async with self._lock: await run_once(self.conn, self.browser, dry_run=config.DRY_RUN)
 ```
 Full algorithm in section 4.
 
-`if __name__ == "__main__":` supports `python -m app.scheduler --dry-run`. It opens `db.connect(config.DB_PATH)`, starts a `Browser`, calls `run_once(..., dry_run="--dry-run" in sys.argv)`, prints `get_run(id)["log"]` and stops the browser. Without the flag it does a real run (Transmission adds, domain moves).
+`if __name__ == "__main__":` supports `python -m app.scheduler --dry-run`. It opens `db.connect(config.DB_PATH)`, starts a `Browser`, calls `run_once(..., dry_run=config.DRY_RUN or "--dry-run" in sys.argv)`, prints `get_run(id)["log"]` and stops the browser. Under prod without the flag it does a real run (Transmission adds, domain moves).
 
 ### app/doctor.py, see section 5. Public surface
 ```python
@@ -599,19 +615,20 @@ That is 22 test functions in 4 files; `uv run pytest -q` reports 56 passed with 
 | area | command | expected |
 |---|---|---|
 | tests | `uv run pytest -q` (Mac) | All pass, no network used. |
-| crawl | `docker compose run --rm scraper python -m app.scheduler --dry-run` | Lines `site 토렌트썸: /v-4-16 -> N posts` for 9 boards (3 sites × 3). A `match [놀면 뭐하니] ...` line with `dry-run: would add <hash>` (later sites say `skip: episode exists` only if a real add happened). Final `done: ... status=ok`. The run record is kept, so the next scheduled run moves back. |
+| crawl | `./server.sh dev dry-run` | Lines `site 토렌트썸: /v-4-16 -> N posts` for 9 boards (3 sites × 3). A `match [놀면 뭐하니] ...` line with `dry-run: would add <hash>` (later sites say `skip: episode exists` only if a real add happened). Final `done: ... status=ok`. |
 | transmission | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
 | transmission | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:<hash>'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. |
-| transmission | In the container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
-| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 2 min apart. Set it back to 60. |
-| web | Browser at http://127.0.0.1:8080 | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. |
+| transmission | In the prod container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
+| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 2 min apart. Set it back to 60. Port 8081 does the same on dev. |
+| web | Browser at http://127.0.0.1:8080 (prod) | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. |
 | doctor | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. |
 | doctor | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. |
 | doctor | Temporarily point a site at a stale domain number and run doctor | `domain_moved`, `suggested_fix.url` = the `<- works` candidate |
-| doctor | Temporarily change `POST_RE` to `r'/nope$'`, `docker compose up -d --build`, run doctor on 토렌트좋다 | `parser_broken`. Revert and rebuild. |
+| doctor | Temporarily change `POST_RE` to `r'/nope$'`, run doctor on 토렌트좋다 in dev (reloads on save) | `parser_broken`. Revert. |
 | doctor | Double-click [doctor] | The second report ends `error` with `다른 진단이 실행 중입니다`. |
-| doctor | `docker compose restart` while a doctor runs | The report row becomes `error` with `interrupted by restart`. |
-| seed | `/programs` on a fresh database | 17 rows, 2 enabled. |
+| doctor | `./server.sh dev restart` while a doctor runs | The report row becomes `error` with `interrupted by restart`. |
+| seed | `./server.sh dev reset`, then `/programs` | 17 rows, 2 enabled. |
+| env | `./server.sh dev up`, open http://127.0.0.1:8081 | `DEV · dry-run` badge; the first run logs `dry-run: would add …` and records no download. |
 
 Troubleshooting: if the container cannot reach the Pi (macOS System Settings → Privacy & Security → Local Network → OrbStack is off; enable it and restart OrbStack), runs log `transmission FAIL ... timed out`, end `partial`, and record no downloads, so the add is retried next run.
 
@@ -624,7 +641,7 @@ Troubleshooting: if the container cannot reach the Pi (macOS System Settings →
 5. **`db` functions take `conn` explicitly instead of using a module global.** This keeps tests isolated and leaves `app.state` as the only global state. Calls are synchronous, for the reason in section 3.
 6. **A busy doctor creates an `error` report with a message** instead of disabling the button. The check sits in `run_doctor` right before `async with LOCK` with no `await` between them, so check and acquire cannot race; the route only creates the report and spawns the task.
 7. **Doctor completion uses the `HX-Refresh: true` header** instead of a second fragment template, so there is one template.
-8. **`dry_run` plus `python -m app.scheduler --dry-run`.** It runs a real crawl without side effects. Without the flag the module does a real run.
+8. **`dry_run` plus `python -m app.scheduler --dry-run`.** It runs a real crawl without side effects. Under prod without the flag the module does a real run.
 9. **After the first `TransmissionError` in a run, remaining adds are skipped.** This avoids N × 10 s timeouts. Status becomes `partial`.
 10. **A board with 0 posts counts as a failure, and the domain probe runs only on the first board's failure.** A 200 with no posts is the parser-broken or parked-domain signal.
 11. **Engine B boards are `/c/4/16`, `/c/2/13`, `/c/4/17`**, not the combined 영상·음악 board `/c/4` (research section 2). The `/c/4/16` page has no fixture; a dry-run covers it.
@@ -637,3 +654,4 @@ Troubleshooting: if the container cannot reach the Pi (macOS System Settings →
 18. **Site validation is shared in `db.py`** (`clean_site_fields`, `URL_RE`, `BOARD_RE`; `MODELS` for model forms), used by `POST /sites/{id}` and Doctor apply. Empty boards are rejected.
 19. **SSRF guard on `browse` and `run_parser`:** public http(s) hostnames only. `# ponytail:` literal-name check; a public name that resolves to a private IP, or a redirect, still gets through.
 20. **Probe candidates use `timeout_ms=15000, retries=1`** (scheduler and `probe_domains`), so five dead candidates don't cost 5 × 3 × 30 s.
+21. **One `APP_ENV` switch for dev and prod.** dev is a dry run end to end, so it can crawl the real sites next to prod without adding torrents or moving site URLs. Separate compose projects, ports and data directories let both run at once. Unset means `dev`.
