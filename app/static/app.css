@@ -117,6 +117,7 @@ code, kbd, pre, samp { font-family: var(--mono); }
 }
 .page-head .sub { margin-top: var(--s-1); color: var(--text-3); font-size: var(--fs-sm); line-height: 18px; }
 .page-head .actions { display: flex; align-items: flex-end; gap: var(--s-2); flex-wrap: wrap; }
+.title-row { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
 .back { display: inline-block; font-size: var(--fs-sm); margin-bottom: var(--s-2); }
 
 /* ---------- card ---------- */

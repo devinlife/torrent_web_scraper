@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app.views import ago, dt, dur
+from app.views import ago, dt, dur, logmark
 
 NOW = datetime(2026, 10, 18, 20, 0, 0)
 
@@ -32,3 +32,11 @@ def test_go():
     assert go("/").headers["location"] == "/"
     assert go("/", msg="interval").headers["location"] == "/?msg=interval"
     assert go("/p", "이미 있음 & x").headers["location"] == "/p?error=%EC%9D%B4%EB%AF%B8+%EC%9E%88%EC%9D%8C+%26+x"
+
+
+def test_logmark():
+    out = logmark("site a: /b -> 3 posts\nsite <x>: /b FAIL timeout & reset\ndone: status=ok")
+    assert out == ('site a: /b -&gt; 3 posts\n<mark class="log-bad">site &lt;x&gt;: /b FAIL timeout &amp; reset</mark>\n'
+                   'done: status=ok')
+    assert logmark(None) == ""
+    assert "<mark" not in logmark("FAILED_X errors")  # whole words only

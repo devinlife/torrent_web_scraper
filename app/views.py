@@ -1,4 +1,5 @@
 """The one Jinja environment both main.py and doctor.py render with: globals, filters, redirect helper."""
+import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
@@ -51,11 +52,20 @@ def dur(start, end) -> str:
     return f"{m}분 {s}초" if m else f"{s}초"
 
 
+BAD_LINE = re.compile(r"\b(FAIL|ERROR|error|exception|failed)\b")
+
+
+def logmark(text: str | None) -> Markup:
+    """Escape a log and wrap failure lines in <mark class="log-bad">."""
+    return Markup("\n".join(Markup('<mark class="log-bad">%s</mark>') % line if BAD_LINE.search(line) else escape(line)
+                             for line in (text or "").splitlines()))
+
+
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 CSS_V = int((HERE / "static" / "app.css").stat().st_mtime)  # cache-buster; uvicorn --reload watches *.py only
 templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, FLASH=FLASH, CSS_V=CSS_V)
-templates.env.filters.update(dt=dt, ago=ago, dur=dur)
+templates.env.filters.update(dt=dt, ago=ago, dur=dur, logmark=logmark)
 templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}  # readable confirm() text
 
 

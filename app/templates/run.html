@@ -2,8 +2,16 @@
 {% from "_macros.html" import badge %}
 {% block title %}실행 #{{ run.id }}{% endblock %}
 {% block content %}
-<p><a href="/">← 대시보드</a></p>
-<h1>실행 #{{ run.id }} {{ badge(run.status) }}</h1>
-<p>시작 {{ run.started|dt }} · 종료 {{ run.finished|dt }} · 매칭 {{ run.matched }} · 추가 {{ run.added }}</p>
-<pre>{{ run.log }}</pre>
+<a class="back" href="/">← 대시보드</a>
+<div class="page-head">
+  <div><h1 class="title-row">실행 #{{ run.id }} {{ badge(run.status) }}</h1>
+    <p class="sub">{{ run.started|dt }} 시작 · {{ run.started|dur(run.finished) }} · 매칭 {{ run.matched }} · 추가 {{ run.added }}</p></div>
+</div>
+{% if run.status in ("error", "partial") %}<div class="flash flash-bad" role="status"><span>실패한 사이트가 있습니다.</span><a href="/sites">사이트 확인 →</a></div>{% endif %}
+{% set log = run.log.strip() %}{% set lines = log.splitlines()|length %}
+<section class="card">
+  <header class="card-head"><h2>로그</h2><span class="muted num">{{ "{:,}".format(lines) }}줄</span></header>
+  {% if lines %}<pre class="log">{{ log|logmark }}</pre>
+  {% else %}<div class="empty"><p class="empty-title">로그가 없습니다</p><p class="muted">{{ "아직 실행 중입니다." if run.status == "running" else "기록된 줄이 없습니다." }}</p></div>{% endif %}
+</section>
 {% endblock %}
