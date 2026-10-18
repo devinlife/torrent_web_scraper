@@ -138,7 +138,7 @@
 | flash | `<div class="flash flash-info|flash-ok|flash-bad" role="status">` | 페이지 머리 바로 아래. 왼쪽 3px 상태색 띠, 상태 쌍 색 바탕, 14px. 오른쪽에 동작 링크(예: "지금 실행") 자리. 자동으로 사라지지 않는다. 다음 이동 때 없어지므로 닫기 버튼도 두지 않는다 |
 | 빈 상태 | `<div class="empty"><p class="empty-title">` + `<p class="muted">` + 동작 | 표 대신 카드 안 가운데 정렬, 위아래 32px. 제목 14px 600, 설명 13px muted. 표의 `colspan` 한 줄보다 덜 표 같아 보여서 "고장"으로 오해하지 않는다 |
 | 로그 pre | `<pre class="log">` | `--mono` 12.5px, 줄높이 1.6, `--surface-2`, 1px `--border`, `--r-sm`, 16px 여백, `max-height: 60vh; overflow: auto`. `FAIL`, `ERROR`, `error` 줄은 서버에서 `<mark class="log-bad">`로 감싸 `--bad-bg` 바탕을 준다 |
-| 확인 | 지금처럼 `onsubmit="return confirm(...)"` | 모달을 만들지 않는다. 대신 버튼 문구에 결과를 쓴다: "진단 · 최대 $1", "삭제". 확인 문구도 지금 것을 유지한다 |
+| 확인 | 지금처럼 `onsubmit="return confirm(...)"` | 모달을 만들지 않는다. 대신 버튼 문구에 결과를 쓴다: "진단 · 최대 $1", "삭제". 진단은 확인 창 없이 바로 시작하고, 나머지 확인 문구는 지금 것을 유지한다 |
 | 접근성 | 전체 | `:focus-visible` 2px ring, 2px offset. 버튼 최소 28px(표), 터치 화면 행 안의 대상은 36px. `prefers-reduced-motion`에서 애니메이션 없음 |
 
 ## 5. 화면별 와이어프레임

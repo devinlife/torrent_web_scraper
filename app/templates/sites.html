@@ -41,8 +41,7 @@
         <button class="switch" role="switch" aria-checked="{{ 'true' if s.enabled else 'false' }}" aria-label="{{ s.name }} 사용"></button>
         <span aria-hidden="true">{{ "켜짐" if s.enabled else "꺼짐" }}</span>
       </form>
-      <form class="site-doctor" method="post" action="/sites/{{ s.id }}/doctor"
-            onsubmit='return confirm({{ (s.name ~ " 진단을 시작할까요? 최대 $1이 듭니다.")|tojson }})'>
+      <form class="site-doctor" method="post" action="/sites/{{ s.id }}/doctor">
         <button class="btn {{ 'btn-primary' if stale else 'btn-secondary' }}" title="{{ doctor_model }}으로 진단"{% if busy %} disabled{% endif %}>진단 · 최대 $1</button>
       </form>
     </div>
