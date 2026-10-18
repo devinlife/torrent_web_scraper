@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from app import db
@@ -27,9 +29,40 @@ def test_seed_and_rules(tmp_path):
 
 def test_program_validation(tmp_path):
     conn = db.connect(tmp_path / "app.db")
-    for name, res in [("", "any"), ("x", "480p"), ("라디오스타", "any")]:
+    for name, res in [("", []), ("x", ["480p"]), ("라디오스타", [])]:
         with pytest.raises(ValueError):
             db.add_program(conn, name, res)
+    pid = db.add_program(conn, "x", ["1080p", "720p"])
+    assert db.list_programs(conn)[-1]["resolution"] == "720p,1080p"
+    db.set_program_resolution(conn, pid, [])
+    assert db.list_programs(conn)[-1]["resolution"] == "any"
+    with pytest.raises(ValueError):
+        db.set_program_resolution(conn, pid, ["480p"])
+
+
+def test_clean_resolution():
+    assert db.clean_resolution([]) == "any"
+    assert db.clean_resolution(["any"]) == "any"
+    assert db.clean_resolution(["", " "]) == "any"
+    assert db.clean_resolution(["1080p", "720p", "720p"]) == "720p,1080p"
+    with pytest.raises(ValueError):
+        db.clean_resolution(["480p"])
+
+
+def test_migrate_old_programs_check(tmp_path):
+    path = tmp_path / "app.db"
+    old = sqlite3.connect(path)
+    old.executescript(db.DDL.replace("CHECK (resolution <> '')", "CHECK (resolution IN ('720p','1080p','any'))"))
+    old.execute("INSERT INTO programs(id, name, resolution) VALUES (7, '놀면', '720p')")
+    old.execute("INSERT INTO downloads VALUES (?, 7, 'E1', 't', 's', '2026-10-18T00:00:00')", (HASH,))
+    old.commit()
+    old.close()
+    conn = db.connect(path)
+    db.set_program_resolution(conn, 7, ["720p", "1080p"])
+    assert db.list_programs(conn)[0]["resolution"] == "720p,1080p"
+    assert db.list_downloads(conn)[0]["program_id"] == 7
+    conn.close()
+    db.connect(path).close()  # second connect: no rebuild
 
 
 def test_stale_marking_and_progress(tmp_path):

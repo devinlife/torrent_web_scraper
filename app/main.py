@@ -115,12 +115,21 @@ async def programs(request: Request, error: str | None = None, msg: str | None =
 
 
 @app.post("/programs")
-async def add_program(request: Request, name: str = Form(), resolution: str = Form()):
+async def add_program(request: Request, name: str = Form(), resolution: list[str] = Form([])):
     try:
         db.add_program(request.app.state.db, name, resolution)
     except ValueError as e:
         return go("/programs", str(e))
     return go("/programs", msg="added")
+
+
+@app.post("/programs/{id}/resolution")
+async def program_resolution(request: Request, id: int, resolution: list[str] = Form([])):
+    try:
+        db.set_program_resolution(request.app.state.db, id, resolution)
+    except ValueError as e:
+        return go("/programs", str(e))
+    return go("/programs", msg="resolution")
 
 
 @app.post("/programs/{id}/enabled")

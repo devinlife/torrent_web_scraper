@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 
 from app import config
+from app.db import RESOLUTIONS
 
 LABEL = {"ok": "정상", "partial": "일부 실패", "error": "실패", "running": "실행 중", "done": "완료",
          "domain_moved": "도메인 이전", "blocked": "차단", "site_down": "사이트 다운",
@@ -18,6 +19,7 @@ FLASH = {"started": ("info", "실행을 시작했습니다. 끝나면 결과가 
          "already-running": ("info", "이미 실행 중입니다."),
          "interval": ("ok", "주기를 {n}분으로 바꿨습니다."),
          "added": ("ok", "프로그램을 추가했습니다. 맨 아래, 가장 나중 순서에 들어갑니다."),
+         "resolution": ("ok", "해상도를 바꿨습니다."),
          "model": ("ok", "진단 모델을 바꿨습니다."),
          "applied": ("ok", "설정을 바꿨습니다. 다음 실행에서 확인됩니다.")}
 
@@ -66,7 +68,8 @@ def logmark(text: str | None) -> Markup:
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 CSS_V = int((HERE / "static" / "app.css").stat().st_mtime)  # cache-buster; uvicorn --reload watches *.py only
-templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, FLASH=FLASH, CSS_V=CSS_V)
+templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, FLASH=FLASH, CSS_V=CSS_V,
+                             RESOLUTIONS=RESOLUTIONS)
 templates.env.filters.update(dt=dt, ago=ago, dur=dur, logmark=logmark)
 templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}  # readable confirm() text
 

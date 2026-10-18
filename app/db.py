@@ -5,11 +5,13 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-DDL = """
-CREATE TABLE IF NOT EXISTS programs(
+PROGRAMS_DDL = """
+CREATE TABLE IF NOT EXISTS {}(
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
-  resolution TEXT NOT NULL DEFAULT 'any' CHECK (resolution IN ('720p','1080p','any')),
+  resolution TEXT NOT NULL DEFAULT 'any' CHECK (resolution <> ''),
   enabled INTEGER NOT NULL DEFAULT 1);
+"""
+DDL = PROGRAMS_DDL.format("programs") + """
 CREATE TABLE IF NOT EXISTS sites(
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, url TEXT NOT NULL,
   boards TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, last_ok_at TEXT);
@@ -48,7 +50,7 @@ SEED_PROGRAMS = [
     ("애프터시그널", "any", 0), ("사랑은 계속된다", "any", 0),
 ]
 SEED_SETTINGS = [("interval_min", "60"), ("doctor_model", "sonnet")]
-RESOLUTIONS = ("720p", "1080p", "any")
+RESOLUTIONS = ("720p", "1080p")  # resolution column: comma-joined subset in this order, or 'any'
 MODELS = ("sonnet", "opus")
 URL_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(?::\d+)?$")
 BOARD_RE = re.compile(r"^/\S*$")
@@ -65,6 +67,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(DDL)
+    _migrate_programs(conn)
     conn.executemany("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", SEED_SETTINGS)
     if not conn.execute("SELECT 1 FROM programs LIMIT 1").fetchone():
         conn.executemany("INSERT INTO programs(name, resolution, enabled) VALUES (?, ?, ?)", SEED_PROGRAMS)
@@ -77,6 +80,24 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.execute("UPDATE doctor_reports SET status='error', progress=progress || 'interrupted by restart' || char(10) "
                  "WHERE status='running'")
     return conn
+
+
+def _migrate_programs(conn) -> None:
+    """Old DBs CHECK resolution IN ('720p','1080p','any'), which rejects '720p,1080p'. Rebuild the table once."""
+    sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='programs'").fetchone()[0]
+    if "'any')" not in sql:
+        return
+    conn.execute("PRAGMA foreign_keys=OFF")  # else DROP TABLE nulls downloads.program_id (ON DELETE SET NULL)
+    try:
+        conn.executescript("BEGIN;" + PROGRAMS_DDL.format("programs_new") +
+                           "INSERT INTO programs_new SELECT * FROM programs; DROP TABLE programs;"
+                           "ALTER TABLE programs_new RENAME TO programs; COMMIT;")
+    except sqlite3.Error:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
 
 
 def _all(conn, sql: str, *args) -> list[dict]:
@@ -99,16 +120,26 @@ def list_programs(conn, enabled_only: bool = False) -> list[dict]:
     return _all(conn, "SELECT * FROM programs" + (" WHERE enabled=1" if enabled_only else "") + " ORDER BY id")
 
 
-def add_program(conn, name: str, resolution: str) -> int:
+def clean_resolution(values: list[str]) -> str:
+    s = {v.strip() for v in values} - {"", "any"}
+    if bad := s - set(RESOLUTIONS):
+        raise ValueError(f"해상도가 잘못됐습니다: {sorted(bad)[0]}")
+    return ",".join(r for r in RESOLUTIONS if r in s) or "any"
+
+
+def add_program(conn, name: str, resolutions: list[str]) -> int:
     name = name.strip()
     if not name:
         raise ValueError("이름을 입력하세요")
-    if resolution not in RESOLUTIONS:
-        raise ValueError(f"해상도가 잘못됐습니다: {resolution}")
+    resolution = clean_resolution(resolutions)
     try:
         return conn.execute("INSERT INTO programs(name, resolution) VALUES (?, ?)", (name, resolution)).lastrowid
     except sqlite3.IntegrityError:
         raise ValueError(f"이미 있는 이름입니다: {name}") from None
+
+
+def set_program_resolution(conn, id: int, resolutions: list[str]) -> None:
+    conn.execute("UPDATE programs SET resolution=? WHERE id=?", (clean_resolution(resolutions), id))
 
 
 def set_program_enabled(conn, id: int, enabled: bool) -> None:

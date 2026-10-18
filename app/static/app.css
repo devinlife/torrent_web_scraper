@@ -271,6 +271,16 @@ form.inline { display: inline; margin: 0; }
 .form-row .unit { align-self: center; color: var(--text-2); }
 .form-row > .label-inline { align-self: center; color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; }
 
+fieldset.field { border: 0; padding: 0; margin: 0; }
+fieldset.field > legend { padding: 0; margin-bottom: 6px; color: var(--text-2); font-size: var(--fs-sm); line-height: 18px; font-weight: 600; }
+.checks { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; min-height: 40px; }
+.checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+.checks input { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; }
+.res-edit > summary { list-style: none; margin-left: -10px; } /* text lines up with th (= .btn-sm padding) */
+.res-edit > summary::-webkit-details-marker { display: none; }
+.res-edit[open] > summary > span { display: inline-block; transform: rotate(180deg); }
+.res-edit form { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; padding-top: var(--s-2); }
+
 /* switch: a form-POST button that looks like a toggle (no JS) */
 .switch-wrap { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); color: var(--text-2); }
 .switch {
@@ -409,6 +419,7 @@ form.inline { display: inline; margin: 0; }
   .table .wide { min-width: 0; }
   .table .grow { width: auto; }
   .hide-sm { display: none; }
+  .table .switch-wrap > span { display: none; } /* switch color + aria-checked carry it; keeps 5 columns in 360px */
   .show-sm { display: block; }
   .page-head .form-row > .select { flex: 1; }
   .page-head .form-row > .btn { flex: none; }
