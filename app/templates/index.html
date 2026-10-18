@@ -12,6 +12,7 @@
 {% set last = runs[0] if runs else none %}
 {% if running %}{% set tone, title = "is-run", "실행 중" %}
 {% elif not last %}{% set tone, title = "is-none", "아직 실행하지 않았습니다" %}
+{% elif "interrupted by restart" in last.log %}{% set tone, title = "is-info", "서버 재시작으로 중단됨" %}
 {% elif last.status == "error" %}{% set tone, title = "is-bad", "실패" %}
 {% elif last.status == "partial" %}{% set tone, title = "is-warn", "일부 실패" %}
 {% elif stale_sites %}{% set tone, title = "is-warn", "정상 · 사이트 " ~ stale_sites|length ~ "곳 응답 없음" %}
@@ -40,7 +41,8 @@
   </form>
 </section>
 
-{% set n_runs = runs|length %}{% set n_ok = runs|selectattr("status", "eq", "ok")|list|length %}
+{% set done = runs|rejectattr("status", "eq", "running")|list %}
+{% set n_runs = done|length %}{% set n_ok = done|selectattr("status", "eq", "ok")|list|length %}
 {% set n_day = downloads|selectattr("added_at", "ge", day_ago)|list|length %}
 {% set n_sites = sites|length %}{% set n_sites_ok = n_sites - stale_sites|length %}
 <dl class="stats">

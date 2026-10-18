@@ -24,7 +24,7 @@
 
 <section class="card section">
   {% if programs %}<div class="table-wrap"><table class="table">
-    <thead><tr><th class="num">순서</th><th class="wide">이름</th><th class="hide-sm">해상도</th><th class="grow">켜기</th><th class="end"><span class="sr-only">삭제</span></th></tr></thead>
+    <thead><tr><th class="num">순서</th><th class="wide grow">이름</th><th class="hide-sm">해상도</th><th>켜기</th><th class="end"><span class="sr-only">삭제</span></th></tr></thead>
     <tbody>{% for p in programs %}{% set res = "무관" if p.resolution == "any" else p.resolution %}
     <tr{% if not p.enabled %} class="off"{% endif %}>
       <td class="num">{{ loop.index }}</td>
