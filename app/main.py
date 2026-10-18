@@ -140,7 +140,7 @@ async def program_delete(request: Request, id: int):
 async def sites(request: Request, error: str | None = None, msg: str | None = None):
     conn = request.app.state.db
     return page(request, "sites.html", sites=db.list_sites(conn), reports=db.latest_doctor_report_per_site(conn),
-                stale_before=stale_before(conn),
+                stale_before=stale_before(conn), interval_min=db.get_setting(conn, "interval_min", "60"),
                 doctor_model=db.get_setting(conn, "doctor_model", "sonnet"), error=error, msg=msg)
 
 
@@ -157,4 +157,4 @@ async def site_edit(request: Request, id: int, url: str = Form(), boards: str = 
     except ValueError as e:
         return go("/sites", str(e))
     db.update_site(request.app.state.db, id, url=url, boards=lines)
-    return go("/sites")
+    return go("/sites", msg="applied")

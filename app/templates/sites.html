@@ -1,51 +1,63 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge %}
+{% from "_macros.html" import badge, flash %}
 {% block title %}사이트{% endblock %}
 {% block content %}
-<h1>사이트</h1>
-{% if error %}<p class="flash">{{ error }}</p>{% endif %}
-{% if msg == "applied" %}<p class="flash info">설정을 바꿨습니다. 다음 실행에서 확인됩니다.</p>{% endif %}
-<form class="row" method="post" action="/settings/doctor-model">
-  <label>진단 모델
-    <select name="model">{% for m in ["sonnet", "opus"] %}
+<div class="page-head">
+  <div><h1>사이트</h1><p class="sub">켜진 {{ sites|selectattr("enabled")|list|length }}곳 · 최근 성공이 {{ 3 * interval_min|int }}분 넘게 없으면 경고합니다</p></div>
+  <div class="actions"><form class="form-row keep" method="post" action="/settings/doctor-model">
+    <label class="label-inline" for="model">진단 모델</label>
+    <select class="select" id="model" name="model">{% for m in ["sonnet", "opus"] %}
       <option value="{{ m }}" {{ "selected" if m == doctor_model }}>{{ m }}</option>{% endfor %}
-    </select></label>
-  <button>저장</button>
-</form>
-<div class="table"><table>
-  <tr><th>사이트</th><th>상태</th><th>최근 성공</th><th>진단</th></tr>
-  {% for s in sites %}{% set r = reports.get(s.id) %}
-  <tr class="{{ '' if s.enabled else 'off' }}">
-    <td>
-      <strong>{{ s.name }}</strong> <a href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.url }}</a>
-      <details>
-        <summary>수정</summary>
-        <form method="post" action="/sites/{{ s.id }}"
-              onsubmit='return confirm({{ (s.name ~ " 설정을 바꿀까요?")|tojson }})'>
-          <label class="block">URL <input type="url" name="url" value="{{ s.url }}" required></label>
-          <label class="block">게시판 경로 (한 줄에 하나)
-            <textarea name="boards" rows="{{ s.boards | length + 1 }}">{{ s.boards | join("\n") }}</textarea></label>
-          <button>저장</button>
-        </form>
-      </details>
-    </td>
-    <td>
-      {{ "켜짐" if s.enabled else "꺼짐" }}
-      <form class="inline" method="post" action="/sites/{{ s.id }}/enabled">
-        <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
-        <button>{{ "끄기" if s.enabled else "켜기" }}</button>
+    </select>
+    <button class="btn btn-secondary">저장</button>
+  </form></div>
+</div>
+{{ flash(error=error, msg=msg) }}
+
+<div class="site-grid">
+{% for s in sites %}{% set r = reports.get(s.id) %}
+{% set stale = s.enabled and APP_ENV != "dev" and (s.last_ok_at or "") < stale_before %}
+{% set busy = r and r.status == "running" %}
+<section class="card site{{ ' is-warn' if stale }}{{ ' off' if not s.enabled }}" aria-labelledby="site-{{ s.id }}">
+  <header class="card-head">
+    <div class="site-id">
+      <h2 id="site-{{ s.id }}">{{ s.name }}</h2>
+      <a class="site-url" href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.url.split("//")[-1] }} <span aria-hidden="true">↗</span><span class="sr-only">(새 탭)</span></a>
+    </div>
+    <form class="switch-wrap" method="post" action="/sites/{{ s.id }}/enabled">
+      <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
+      <button class="switch" role="switch" aria-checked="{{ 'true' if s.enabled else 'false' }}" aria-label="{{ s.name }} {{ '끄기' if s.enabled else '켜기' }}"></button>
+      <span aria-hidden="true">{{ "켜짐" if s.enabled else "꺼짐" }}</span>
+    </form>
+  </header>
+  <dl class="site-facts">
+    <div><dt>최근 성공</dt><dd>
+      {%- if stale %}<span class="badge warn" title="주기의 3배 넘게 성공 없음"><i></i>응답 없음</span> {% endif %}
+      {%- if s.last_ok_at %}{{ s.last_ok_at|dt }} <span class="muted">· {{ s.last_ok_at|ago }}</span>
+      {%- elif APP_ENV == "dev" %}<span class="muted">dev는 기록하지 않음</span>
+      {%- else %}<span class="muted">성공 기록 없음</span>{% endif %}</dd></div>
+    <div><dt>최근 진단</dt><dd>
+      {%- if busy %}<span class="badge running"><i></i>진단 중</span> <a href="/doctor/{{ r.id }}">진행 보기 →</a>
+      {%- elif r %}{{ badge(r.verdict or r.status) }} <a href="/doctor/{{ r.id }}">{{ r.started|ago }} →</a>
+      {%- else %}<span class="muted">진단 기록 없음</span>{% endif %}</dd></div>
+  </dl>
+  <div class="site-foot">
+    <details class="editor">
+      <summary class="btn btn-ghost" aria-label="{{ s.name }} 설정 수정"></summary>
+      <form class="editor-body" method="post" action="/sites/{{ s.id }}"
+            onsubmit='return confirm({{ (s.name ~ " 설정을 바꿀까요?")|tojson }})'>
+        <label class="field"><span>URL</span><input class="input" type="url" name="url" value="{{ s.url }}" required></label>
+        <label class="field"><span>게시판 경로 (한 줄에 하나)</span>
+          <textarea class="textarea" name="boards" rows="{{ s.boards|length + 1 }}">{{ s.boards|join("\n") }}</textarea></label>
+        <div class="form-actions"><button class="btn btn-primary">저장</button></div>
       </form>
-    </td>
-    <td>{% if s.enabled and APP_ENV != "dev" and (s.last_ok_at or "") < stale_before %}<span class="badge error" title="주기의 3배 넘게 성공 없음">{% if s.last_ok_at %}{{ s.last_ok_at|dt }} ({{ s.last_ok_at|ago }}){% else %}없음{% endif %}</span>
-      {% elif s.last_ok_at %}{{ s.last_ok_at|dt }} <span class="muted">({{ s.last_ok_at|ago }})</span>{% else %}-{% endif %}</td>
-    <td>
-      {% if r %}<a href="/doctor/{{ r.id }}">{{ badge(r.verdict or r.status) }}</a> <span class="muted">· {{ r.started|ago }}</span>{% endif %}
-      <form class="inline" method="post" action="/sites/{{ s.id }}/doctor"
-            onsubmit='return confirm({{ (s.name ~ " 진단을 시작할까요? 최대 $1이 듭니다.")|tojson }})'>
-        <button>진단</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
-</table></div>
+    </details>
+    <form class="site-doctor" method="post" action="/sites/{{ s.id }}/doctor"
+          onsubmit='return confirm({{ (s.name ~ " 진단을 시작할까요? 최대 $1이 듭니다.")|tojson }})'>
+      <button class="btn {{ 'btn-primary' if stale else 'btn-secondary' }}" title="{{ doctor_model }}으로 진단"{% if busy %} disabled{% endif %}>진단 · 최대 $1</button>
+    </form>
+  </div>
+</section>
+{% endfor %}
+</div>
 {% endblock %}
