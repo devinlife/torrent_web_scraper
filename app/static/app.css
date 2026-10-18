@@ -340,6 +340,32 @@ form.inline { display: inline; margin: 0; }
 .site-doctor { position: absolute; top: var(--s-3); right: var(--pad-card); }
 .site .editor-body { margin: var(--s-3) calc(-1 * var(--pad-card)) calc(-1 * var(--s-3)); box-shadow: none; }
 
+/* doctor report */
+.hero-text { margin-top: var(--s-2); font-size: var(--fs-md); line-height: 24px; }
+.card-foot { display: flex; justify-content: flex-end; gap: var(--s-2); padding: var(--s-3) var(--pad-card); border-top: 1px solid var(--border); }
+.diff th[scope="row"] { width: 1%; background: none; font-size: var(--fs-sm); vertical-align: top; padding-top: 13px; }
+.diff td { font-family: var(--mono); font-size: var(--fs-sm); white-space: pre-line; vertical-align: top; }
+.diff td.muted { font-family: var(--font); }
+.diff td.changed { background: var(--ok-bg); font-weight: 600; }
+.diff tbody tr:hover { background: none; }
+.diff tbody tr:last-child th { border-bottom: 0; }
+.list { padding-left: calc(var(--pad-card) + 1.1em); }
+.list li + li { margin-top: 6px; }
+.card-body.list > * + * { margin-top: 6px; }
+.fold > summary { cursor: pointer; list-style: none; justify-content: flex-start; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "▶"; color: var(--text-3); font-size: 10px; transition: transform .15s; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold > summary .muted { margin-left: auto; }
+.fold:not([open]) > summary { border-bottom: 0; }
+.fold > summary:hover { background: var(--surface-2); }
+
+/* error page */
+.error-card { max-width: 480px; margin: var(--s-10) auto 0; padding: var(--s-10) var(--pad-card); text-align: center; }
+.error-code { color: var(--text-3); font-size: var(--fs-stat); line-height: 36px; font-variant-numeric: tabular-nums; }
+.error-msg { margin-top: var(--s-2); font-size: var(--fs-md); line-height: 24px; }
+.error-actions { display: flex; justify-content: center; gap: var(--s-2); margin-top: var(--s-6); }
+
 /* ---------- utilities ---------- */
 .muted { color: var(--text-3); }
 .num { font-variant-numeric: tabular-nums; }
@@ -380,4 +406,10 @@ form.inline { display: inline; margin: 0; }
   .site-foot .editor > summary { width: calc(50% - 4px); }
   .site-doctor { left: calc(50% + 4px); }
   .site-doctor .btn { width: 100%; }
+  .card-foot .btn { flex: 1; }
+  .diff thead { display: none; }
+  .diff tr { display: block; padding: var(--s-3); border-bottom: 1px solid var(--border); }
+  .diff tbody tr:last-child { border-bottom: 0; }
+  .diff th[scope="row"], .diff td { display: block; height: auto; padding: 2px 0; border: 0; width: auto; }
+  .diff td::before { content: attr(data-label); display: block; color: var(--text-3); font: 600 var(--fs-xs)/16px var(--font); }
 }

@@ -1,6 +1,5 @@
 """Doctor: a hermetic Claude agent with 4 read-only tools that diagnoses why a site stopped working."""
 import asyncio
-import html
 import ipaddress
 import json
 import re
@@ -17,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import crawler, db
-from app.views import go, templates
+from app.views import go, logmark, templates
 
 router = APIRouter()
 LOCK = asyncio.Lock()
@@ -277,11 +276,11 @@ async def show_doctor(request: Request, id: int):
 @router.get("/doctor/{id}/progress")
 async def doctor_progress(request: Request, id: int):
     r = _report(request, id)
-    body = html.escape(r["progress"])
+    body = logmark(r["progress"])  # same markup as doctor.html's <pre id="progress" class="log">
     if r["status"] == "running":
-        return HTMLResponse(f'<pre id="progress" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" '
+        return HTMLResponse(f'<pre id="progress" class="log" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" '
                             f'hx-swap="outerHTML">{body}</pre>')
-    return HTMLResponse(f'<pre id="progress">{body}</pre>', headers={"HX-Refresh": "true"})
+    return HTMLResponse(f'<pre id="progress" class="log">{body}</pre>', headers={"HX-Refresh": "true"})
 
 
 @router.post("/doctor/{id}/apply")

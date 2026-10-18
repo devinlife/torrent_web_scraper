@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block title %}오류 {{ code }}{% endblock %}
 {% block content %}
-<h1>오류 {{ code }}</h1>
-<p>{{ message }}</p>
-<p><a href="/">← 대시보드</a></p>
+{% set back = request.headers.get("referer", "") %}
+<section class="card error-card">
+  <h1 class="error-code">{{ code }}</h1>
+  <p class="error-msg">{{ message }}</p>
+  <div class="error-actions">
+    <a class="btn btn-primary" href="/">대시보드로</a>
+    {% if back.startswith(request.base_url|string) and back != request.url|string %}<a class="btn btn-ghost" href="{{ back }}">뒤로</a>{% endif %}
+  </div>
+</section>
 {% endblock %}
