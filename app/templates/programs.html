@@ -25,7 +25,7 @@
     </td>
     <td>
       <form class="inline" method="post" action="/programs/{{ p.id }}/delete"
-            onsubmit='return confirm({{ ("「" ~ p.name ~ "」을 삭제할까요? 다운로드 기록은 남습니다.")|tojson }})'>
+            onsubmit='return confirm({{ ("「" ~ p.name ~ "」 삭제할까요? 다운로드 기록은 남습니다.")|tojson }})'>
         <button class="danger">삭제</button></form>
     </td>
   </tr>

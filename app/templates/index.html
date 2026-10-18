@@ -14,7 +14,7 @@
   {% if last.status in ("error", "partial") %} · <a href="/sites">사이트 확인 →</a>{% endif %}
 </p>{% endif %}
 <p>
-  {% if running %}{{ badge("running") }}
+  {% if running %}다음 실행 <strong>실행 중</strong>
   {% elif due %}다음 실행 <strong>곧 실행</strong>
   {% else %}다음 실행 <strong>{{ next_run_at|dt }}</strong> ({{ next_run_at|ago }}){% endif %}
   · {{ interval_min }}분마다

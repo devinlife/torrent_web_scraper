@@ -17,7 +17,7 @@
 {% if site and (fix.url or fix.boards) %}
 {% set new_url, new_boards = fix.url or site.url, fix.boards or site.boards %}
 <form method="post" action="/doctor/{{ report.id }}/apply"
-      onsubmit='return confirm({{ ("사이트 URL을 " ~ new_url ~ "로 바꿀까요?")|tojson }})'>
+      onsubmit='return confirm({{ (report.site_name ~ " 설정을 제안대로 바꿀까요?")|tojson }})'>
 <div class="table"><table>
   <tr><th></th><th>현재</th><th>제안</th></tr>
   <tr><th>URL</th><td>{{ site.url }}</td><td>{% if new_url != site.url %}<strong>{{ new_url }}</strong>{% else %}{{ new_url }}{% endif %}</td></tr>
