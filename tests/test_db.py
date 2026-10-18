@@ -45,3 +45,11 @@ def test_stale_marking_and_progress(tmp_path):
     assert db.get_run(conn, rid)["status"] == "error"
     assert db.get_doctor_report(conn, did)["status"] == "error"
     assert db.latest_doctor_report_per_site(conn)[1]["id"] == did
+
+
+def test_clean_site_fields():
+    assert db.clean_site_fields(" https://x.com/ ", ["/a", "", " /b "]) == ("https://x.com", ["/a", "/b"])
+    for url, boards in [("https://x.com?", ["/a"]), ("https://x.com", []), ("https://x.com", ["", " "]),
+                        ("https://x.com", ["/a\n/b"]), ("https://x.com", ["a"]), ("ftp://x.com", ["/a"])]:
+        with pytest.raises(ValueError):
+            db.clean_site_fields(url, boards)

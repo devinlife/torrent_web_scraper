@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from app import db
+from app import config, db
 from app.browser import FetchResult
 from app.scheduler import run_once
 
@@ -57,3 +57,24 @@ def test_domain_probe_moves_site(tmp_path):
     assert "domain moved https://torrentsome266.com -> https://torrentsome268.com" in run["log"]
     assert "dry-run: would add " + HASH in run["log"] and run["status"] == "ok"
     assert db.get_site(conn, 1)["url"] == "https://torrentsome268.com"
+
+
+def test_transmission_unconfigured_is_partial(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "TRANSMISSION_URL", "")  # real add_magnet: Request("") raises ValueError
+    conn = db.connect(tmp_path / "app.db")
+    db.update_site(conn, 1, boards=["/v-4-16"])
+    for i in (2, 3):
+        db.update_site(conn, i, enabled=False)
+    run = db.get_run(conn, asyncio.run(run_once(conn, FakeBrowser())))
+    assert run["status"] == "partial" and "transmission FAIL" in run["log"], run["log"]
+    assert db.list_downloads(conn) == []
+
+
+def test_failed_later_board_is_partial(tmp_path):
+    conn = db.connect(tmp_path / "app.db")
+    db.update_site(conn, 1, boards=["/v-4-16", "/v-2-13"])  # the fake browser only knows /v-4-16
+    for i in (2, 3):
+        db.update_site(conn, i, enabled=False)
+    run = db.get_run(conn, asyncio.run(run_once(conn, FakeBrowser(), dry_run=True)))
+    assert run["status"] == "partial", run["log"]
+    assert db.get_site(conn, 1)["last_ok_at"]

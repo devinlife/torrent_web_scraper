@@ -35,6 +35,7 @@ class Browser:
         self._pw = self._browser = self._ctx = None
 
     async def start(self) -> None:
+        self._ctx = None  # stays None if launch fails, so the next fetch retries
         if self._pw is None:
             self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(headless=False, args=["--headless=new", "--no-sandbox"])
@@ -50,11 +51,14 @@ class Browser:
     async def fetch(self, url: str, *, timeout_ms: int = 30000, retries: int = 2) -> FetchResult:
         """Never raises for navigation failures; callers branch on .ok."""
         async with self._lock:
-            if self._browser is None or not self._browser.is_connected():
-                if self._browser is not None:  # crashed: drop the dead browser, keep playwright
-                    with suppress(Error):
-                        await self._browser.close()
-                await self.start()
+            if self._ctx is None or self._browser is None or not self._browser.is_connected():
+                try:
+                    if self._browser is not None:  # crashed: drop the dead browser, keep playwright
+                        with suppress(Error):
+                            await self._browser.close()
+                    await self.start()
+                except Error as e:
+                    return FetchResult(0, url, "", _err(e))
             error = ""
             for attempt in range(1 + retries):
                 if attempt:

@@ -4,6 +4,7 @@ import logging
 import sys
 from contextlib import suppress
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from app import config, crawler, db, transmission
 from app.browser import Browser, FetchResult
@@ -34,7 +35,7 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
             tr_down = False
             ok_sites = 0
             for site in sites:
-                name, base, site_ok = site["name"], site["url"], True
+                name, base, site_ok, site_any = site["name"], site["url"], True, False
                 for i, board in enumerate(site["boards"]):
                     r = await browser.fetch(base + board)
                     posts = crawler.parse_board(r.html, r.final_url) if r.ok else []
@@ -42,7 +43,7 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                         L(f"site {name}: {board} FAIL {_why(r)}")
                         L(f"site {name}: probing +1..+5")
                         for cand in crawler.domain_candidates(base):
-                            r = await browser.fetch(cand + board, timeout_ms=15000, retries=0)
+                            r = await browser.fetch(cand + board, timeout_ms=15000, retries=1)
                             posts = crawler.parse_board(r.html, r.final_url) if r.ok else []
                             if posts:
                                 db.update_site(conn, site["id"], url=cand)
@@ -57,6 +58,11 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                         L(f"site {name}: {board} FAIL {_why(r)}")
                         site_ok = False
                         continue
+                    if i == 0 and (origin := "{0.scheme}://{0.netloc}".format(urlsplit(r.final_url))) != base:
+                        db.update_site(conn, site["id"], url=origin)  # followed a redirect to a new domain
+                        L(f"site {name}: domain moved {base} -> {origin}")
+                        base = origin
+                    site_any = True
                     L(f"site {name}: {board} -> {len(posts)} posts")
                     for title, url in posts:
                         if url in seen:
@@ -101,11 +107,10 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                         if res == "added":
                             added += 1
                         L(f"  {res} {h}")
-                if site_ok:
+                if site_any:  # one working board is enough; a failed later board only makes the run partial
                     db.update_site(conn, site["id"], last_ok_at=db.now())
                     ok_sites += 1
-                else:
-                    site_fail = True
+                site_fail = site_fail or not site_ok
             status = "error" if ok_sites == 0 else "partial" if (site_fail or soft_fail) else "ok"
     except Exception as e:
         logging.exception("run failed")
@@ -169,6 +174,7 @@ class Scheduler:
                     await self._run()
                 except Exception:
                     logging.exception("scheduler")
+                    await asyncio.sleep(60)  # no hot spin if create_run fails before a run row exists
                 continue
             self._wake.clear()
             with suppress(TimeoutError):

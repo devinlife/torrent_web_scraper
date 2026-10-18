@@ -1,5 +1,6 @@
 """SQLite access. One autocommit connection, used only from the event-loop thread."""
 import json
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +49,9 @@ SEED_PROGRAMS = [
 ]
 SEED_SETTINGS = [("interval_min", "60"), ("doctor_model", "sonnet")]
 RESOLUTIONS = ("720p", "1080p", "any")
+MODELS = ("sonnet", "opus")
+URL_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(?::\d+)?$")
+BOARD_RE = re.compile(r"^/\S*$")
 
 
 def now() -> str:
@@ -133,6 +137,19 @@ def update_site(conn, id: int, *, url: str | None = None, boards: list[str] | No
     if fields:
         sets = ", ".join(f"{k}=?" for k in fields)
         conn.execute(f"UPDATE sites SET {sets} WHERE id=?", (*fields.values(), id))
+
+
+def clean_site_fields(url: str, boards: list[str]) -> tuple[str, list[str]]:
+    """Validate a site's url/boards before update_site (web form and Doctor apply)."""
+    url = url.strip().rstrip("/")
+    boards = [b.strip() for b in boards if b.strip()]
+    if not URL_RE.fullmatch(url):
+        raise ValueError("bad url")
+    if bad := [b for b in boards if not BOARD_RE.fullmatch(b)]:
+        raise ValueError(f"bad board: {bad[0]}")
+    if not boards:
+        raise ValueError("boards empty")
+    return url, boards
 
 
 # settings
