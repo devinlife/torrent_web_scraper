@@ -87,7 +87,7 @@ async def run_now(request: Request):
 
 
 @app.post("/settings/interval")
-async def set_interval(request: Request, minutes: int = Form(ge=1, le=1440)):
+async def set_interval(request: Request, minutes: int = Form(ge=5, le=1440)):
     request.app.state.scheduler.set_interval(minutes)
     return go("/", msg="interval")
 

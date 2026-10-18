@@ -147,7 +147,7 @@ class Scheduler:
     def start(self) -> None                   # self._task = asyncio.create_task(self._loop())
     async def stop(self) -> None              # cancel + await, suppress CancelledError
     def trigger_now(self) -> bool             # False if a run is in progress (ignored); else sets flag + wakes
-    def set_interval(self, minutes: int) -> None  # 1..1440 else ValueError; db.set_setting; wake
+    def set_interval(self, minutes: int) -> None  # 5..1440 else ValueError; db.set_setting; wake
     @property
     def running(self) -> bool                 # self._lock.locked()
     next_run_at: datetime | None              # recomputed each loop tick
@@ -354,7 +354,7 @@ Every site line contains `site {name}:`. Doctor greps on that.
 ### `Scheduler._loop`
 ```
 while True:
-  interval = int(db.get_setting(conn, "interval_min", "60"))
+  interval = max(5, int(db.get_setting(conn, "interval_min", "60")))  # clamp legacy values < 5
   last = db.list_runs(conn, 1)
   self.next_run_at = fromisoformat(last[0]["started"]) + timedelta(minutes=interval) if last else datetime.now()
   if self._now or datetime.now() >= self.next_run_at:
@@ -522,7 +522,7 @@ await sched.stop(); await browser.stop(); conn.close()
 |---|---|---|---|
 | GET `/` | | `index.html` | |
 | POST `/run-now` | | `ok = sched.trigger_now()` | 303 `/` (`/?msg=already-running` if not ok) |
-| POST `/settings/interval` | `minutes: int = Form(ge=1, le=1440)` | `sched.set_interval` | 303 `/?msg=interval` |
+| POST `/settings/interval` | `minutes: int = Form(ge=5, le=1440)` | `sched.set_interval` | 303 `/?msg=interval` |
 | POST `/settings/doctor-model` | `model` ∈ `db.MODELS`, else 400 | `set_setting("doctor_model")` | 303 `/sites?msg=model` |
 | GET `/programs` | `?error=`, `?msg=` | `programs.html` | |
 | POST `/programs` | `name`, `resolution` ∈ {720p, 1080p, any} | `add_program`; ValueError gives `?error=<msg>` | 303 `/programs?msg=added` |
@@ -540,7 +540,7 @@ Templates and the context each receives (every template also gets `request`):
   - Styles live in `app/static/app.css` (mounted at `/static`, linked as `app.css?v={{ CSS_V }}`): tokens on `:root`, redefined under `prefers-color-scheme: dark` (dark mode follows the OS), one 720px breakpoint. Tokens, components and screen layouts are specified in `_workspace/design-spec.md`.
   - Font: Pretendard Variable from jsDelivr (SRI), falling back to the system Korean fonts.
   - `app/views.py` holds the single `templates` environment used by `main.py` and `doctor.py`: `LABEL` (Korean status labels; `_macros.html` `badge(s)` keeps the raw value as class and `title`), `FLASH` (`?msg=` texts for the `flash()` macro), the `dt`/`ago`/`dur`/`logmark` filters, and `go(path, error, msg)`.
-- `index.html`: `next_run_at`, `running`, `interval_min`, `msg`, `runs = list_runs(10)`, `downloads = list_downloads(20)`. Interval form uses `<input type=number min=1 max=1440 required>`.
+- `index.html`: `next_run_at`, `running`, `interval_min`, `msg`, `runs = list_runs(10)`, `downloads = list_downloads(20)`. Interval form uses `<input type=number min=5 max=1440 required>`.
 - `programs.html`: `programs`, `error`.
 - `sites.html`: `sites`, `reports = latest_doctor_report_per_site()`, `stale_before`, `interval_min`, `doctor_model`, `error`, `msg`. One card per site with:
   - a toggle switch form
@@ -623,7 +623,7 @@ That is 22 test functions in 4 files; `uv run pytest -q` reports 56 passed with 
 | transmission | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
 | transmission | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:<hash>'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. |
 | transmission | In the prod container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
-| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 2 min apart. Set it back to 60. Port 8081 does the same on dev. |
+| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=5 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 5 min apart. Set it back to 60. Port 8081 does the same on dev. |
 | web | Browser at http://127.0.0.1:8080 (prod) | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. |
 | doctor | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. |
 | doctor | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. |

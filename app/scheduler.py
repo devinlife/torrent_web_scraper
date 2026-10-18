@@ -164,8 +164,8 @@ class Scheduler:
         return True
 
     def set_interval(self, minutes: int) -> None:
-        if not 1 <= minutes <= 1440:
-            raise ValueError("interval must be 1..1440 minutes")
+        if not 5 <= minutes <= 1440:
+            raise ValueError("interval must be 5..1440 minutes")
         db.set_setting(self.conn, "interval_min", str(minutes))
         self._wake.set()
 
@@ -177,7 +177,7 @@ class Scheduler:
         # Waits are capped at 60 s and the wall clock re-checked: asyncio's monotonic clock
         # stops while the Mac sleeps, so one long wait would fire hours late.
         while True:
-            interval = int(db.get_setting(self.conn, "interval_min", "60"))
+            interval = max(5, int(db.get_setting(self.conn, "interval_min", "60")))  # older DBs may hold < 5
             last = db.list_runs(self.conn, 1)
             self.next_run_at = (datetime.fromisoformat(last[0]["started"]) + timedelta(minutes=interval)
                                 if last else datetime.now())
