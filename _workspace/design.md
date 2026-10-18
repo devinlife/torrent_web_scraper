@@ -99,7 +99,7 @@ class FetchResult:
     def ok(self) -> bool: return self.error is None and 200 <= self.status < 400
 
 class Browser:
-    def __init__(self, settle_ms: int = 2000) -> None
+    def __init__(self, settle_ms: int = 2000, gap_s: tuple[float, float] = (2.0, 5.0)) -> None
     async def start(self) -> None       # async_playwright().start(); launch; new_context
     async def stop(self) -> None        # close context/browser/playwright; idempotent
     async def fetch(self, url: str, *, timeout_ms: int = 30000, retries: int = 2) -> FetchResult
@@ -113,6 +113,7 @@ self._ctx = await self._browser.new_context(locale="ko-KR")
 
 `fetch` does the following:
 - The whole call, including retries, runs under `async with self._lock`, a single `asyncio.Lock`.
+- Pacing, first thing inside the lock: per URL host it remembers when the last fetch finished; if that was less than `random.uniform(*gap_s)` seconds ago it sleeps the remainder. Different hosts (including domain-probe candidates) don't wait. Tests pass `gap_s=(0, 0)` or fake the clock.
 - Inside the lock, if `self._ctx is None`, `self._browser is None` or `not self._browser.is_connected()`, it closes the dead browser (keeping the playwright driver) and calls `start()` again. `start()` sets `self._ctx = None` first, so a launch that fails halfway is retried on the next fetch. A relaunch failure comes back as `FetchResult(0, url, "", err)`, never raised. This is crash recovery and also allows lazy start.
 - Each attempt:
   1. `page = await ctx.new_page()`
