@@ -3,33 +3,38 @@
 {% block title %}Doctor · {{ report.site_name }}{% endblock %}
 {% block head %}<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>{% endblock %}
 {% block content %}
+<p><a href="/sites">← 사이트</a></p>
 <h1>Doctor: {{ report.site_name }}</h1>
 <p>
   {{ badge(report.verdict or report.status) }}
-  <span class="muted">model {{ report.model }} · 비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }} · 시작 {{ report.started|dt }}</span>
+  <span class="muted">model {{ report.model }} ·
+  {% if report.status == "running" %}진행 중 · 상한 $1{% else %}비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }}{% endif %}
+  · 시작 {{ report.started|dt }} ({{ report.started|ago }})</span>
 </p>
-{% if site %}<p class="muted">현재 설정: {{ site.url }} {{ site.boards|join(" ") }}</p>{% endif %}
+{% if data %}
+<p>{{ data.summary }}</p>
+{% set fix = data.suggested_fix or {} %}
+{% if site and (fix.url or fix.boards) %}
+{% set new_url, new_boards = fix.url or site.url, fix.boards or site.boards %}
+<form method="post" action="/doctor/{{ report.id }}/apply"
+      onsubmit='return confirm({{ ("사이트 URL을 " ~ new_url ~ "로 바꿀까요?")|tojson }})'>
+<div class="table"><table>
+  <tr><th></th><th>현재</th><th>제안</th></tr>
+  <tr><th>URL</th><td>{{ site.url }}</td><td>{% if new_url != site.url %}<strong>{{ new_url }}</strong>{% else %}{{ new_url }}{% endif %}</td></tr>
+  <tr><th>게시판</th><td>{{ site.boards|join(" ") }}</td>
+      <td>{% if new_boards != site.boards %}<strong>{{ new_boards|join(" ") }}</strong>{% else %}{{ new_boards|join(" ") }}{% endif %}</td></tr>
+</table></div>
+<p><button class="primary">이 설정으로 변경</button></p>
+</form>
+{% elif site %}<p class="muted">현재 설정: {{ site.url }} {{ site.boards|join(" ") }}</p>{% endif %}
+<h2>근거</h2>
+<ul>{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+{% endif %}
 
 {% if report.status == "running" %}
+<h2>진행 로그</h2>
 <pre id="progress" hx-get="/doctor/{{ report.id }}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{{ report.progress }}</pre>
 {% else %}
-<pre id="progress">{{ report.progress }}</pre>
+<details><summary>진행 로그</summary><pre id="progress">{{ report.progress }}</pre></details>
 {% endif %}
-
-{% if data %}
-<h2>요약</h2>
-<p>{{ data.summary }}</p>
-<ul>{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
-{% set fix = data.suggested_fix or {} %}
-{% if fix.url or fix.boards %}
-<h2>수정 제안</h2>
-<form method="post" action="/doctor/{{ report.id }}/apply"
-      onsubmit='return confirm({{ ("사이트 URL을 " ~ (fix.url or site.url) ~ "로 바꿀까요?")|tojson }})'>
-  {% if fix.url %}<p>url: <code>{{ fix.url }}</code></p>{% endif %}
-  {% if fix.boards %}<p>boards: {% for b in fix.boards %}<code>{{ b }}</code> {% endfor %}</p>{% endif %}
-  <button>적용</button>
-</form>
-{% endif %}
-{% endif %}
-<p><a href="/sites">← 사이트</a></p>
 {% endblock %}

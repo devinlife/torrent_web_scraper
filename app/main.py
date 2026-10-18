@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from http import HTTPStatus
 
@@ -127,7 +127,9 @@ async def program_delete(request: Request, id: int):
 @app.get("/sites")
 async def sites(request: Request, error: str | None = None, msg: str | None = None):
     conn = request.app.state.db
+    stale = datetime.now() - timedelta(minutes=3 * int(db.get_setting(conn, "interval_min", "60")))
     return page(request, "sites.html", sites=db.list_sites(conn), reports=db.latest_doctor_report_per_site(conn),
+                stale_before=stale.isoformat(timespec="seconds"),
                 doctor_model=db.get_setting(conn, "doctor_model", "sonnet"), error=error, msg=msg)
 
 

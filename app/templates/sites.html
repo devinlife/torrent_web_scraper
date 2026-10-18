@@ -36,9 +36,10 @@
         <button>{{ "끄기" if s.enabled else "켜기" }}</button>
       </form>
     </td>
-    <td>{{ s.last_ok_at|dt }}</td>
+    <td>{% if s.enabled and APP_ENV != "dev" and (s.last_ok_at or "") < stale_before %}<span class="badge error" title="주기의 3배 넘게 성공 없음">{% if s.last_ok_at %}{{ s.last_ok_at|dt }} ({{ s.last_ok_at|ago }}){% else %}없음{% endif %}</span>
+      {% elif s.last_ok_at %}{{ s.last_ok_at|dt }} <span class="muted">({{ s.last_ok_at|ago }})</span>{% else %}-{% endif %}</td>
     <td>
-      {% if r %}<a href="/doctor/{{ r.id }}">{{ badge(r.verdict or r.status) }}</a>{% endif %}
+      {% if r %}<a href="/doctor/{{ r.id }}">{{ badge(r.verdict or r.status) }}</a> <span class="muted">· {{ r.started|ago }}</span>{% endif %}
       <form class="inline" method="post" action="/sites/{{ s.id }}/doctor"
             onsubmit='return confirm({{ (s.name ~ " 진단을 시작할까요? 최대 $1이 듭니다.")|tojson }})'>
         <button>진단</button>
