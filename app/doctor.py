@@ -1,11 +1,11 @@
 """Doctor: a hermetic Claude agent with 4 read-only tools that diagnoses why a site stopped working."""
 import asyncio
 import html
+import ipaddress
 import json
 import re
 import socket
 import ssl
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +24,6 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 LOCK = asyncio.Lock()
 NAMES = ("dns_tls_check", "browse", "run_parser", "probe_domains")
-MODELS = ("sonnet", "opus")
 _tasks: set[asyncio.Task] = set()  # ponytail: in-memory only; a restart marks running reports 'error' (db.connect)
 
 DOCTOR_PROMPT = """You diagnose why a Korean torrent board site does not work for our crawler. You have exactly four read-only tools.
@@ -61,8 +60,30 @@ SCHEMA = {"type": "object", "required": ["verdict", "summary", "evidence", "sugg
 
 CF_RE = re.compile(r"cf-chl|challenge-platform|turnstile|Just a moment", re.I)
 JUNK_RE = re.compile(r"<(script|style|svg|noscript)\b.*?</\1\s*>|<!--.*?-->", re.I | re.S)
-URL_RE = re.compile(r"^https?://[^/\s]+$")
-BOARD_RE = re.compile(r"^/\S*$")
+ATTR_RE = re.compile(r'\s(?!href=|title=)[\w:-]+=("[^"]*"|\'[^\']*\'|[^\s>]+)')
+BODY_RE = re.compile(r"<body", re.I)
+
+
+def _public_http_url(url: str) -> bool:
+    # ponytail: literal-name check only; a public name resolving to a private IP (or a redirect) still gets through.
+    u = urlsplit(url)
+    h = (u.hostname or "").rstrip(".")
+    if u.scheme not in ("http", "https") or not h or h == "localhost" or h.endswith((".internal", ".local")):
+        return False
+    if re.fullmatch(r"\d+|0x[0-9a-f]*", h.rsplit(".", 1)[-1]):  # Chromium reads 2130706433 / 0x7f.1 as IPv4
+        return False
+    try:
+        ipaddress.ip_address(h)
+        return False
+    except ValueError:
+        return True
+
+
+def _trim_html(h: str) -> str:
+    """Board-sized view for the model: body only, no script/style/svg/noscript/comments, only href/title attrs."""
+    if m := BODY_RE.search(h):
+        h = h[m.start():]
+    return " ".join(ATTR_RE.sub("", JUNK_RE.sub("", h)).split())
 
 
 def _dns_tls(host: str) -> list[str]:
@@ -107,30 +128,31 @@ def build_tools(conn, browser, site: dict) -> list:
           "(www.google.com). Facts only.", {"host": str}, annotations=ro)
     async def dns_tls_check(args):
         h = args["host"].strip()
-        return _text(await asyncio.to_thread(_dns_tls, urlsplit(h).hostname or h))
+        return _text(await asyncio.to_thread(_dns_tls, urlsplit(h if "//" in h else "//" + h).hostname or h))
 
     @tool("browse", "Open a URL in our headless Chromium (same as the crawler). Returns status, final URL, "
           "title, Cloudflare-challenge flag and trimmed HTML.", {"url": str},
           annotations=ToolAnnotations(readOnlyHint=True, maxResultSizeChars=20000))
     async def browse(args):
         url = args["url"].strip()
-        if not url.startswith(("http://", "https://")):
-            return {**_text(["only http(s):// URLs"]), "is_error": True}
-        r = await browser.fetch(url)
-        title = re.search(r"<title[^>]*>(.*?)</title>", r.html, re.I | re.S)
-        body = " ".join(JUNK_RE.sub("", r.html).split())
-        return _text([f"status: {r.status}", f"final_url: {r.final_url}",
-                      f"title: {' '.join(title[1].split()) if title else '-'}",
-                      f"cloudflare_challenge: {'yes' if CF_RE.search(r.html) else 'no'}", f"error: {r.error or '-'}",
-                      f"html ({min(len(body), 15000)} of {len(body)} chars, script/style/svg/noscript/comments "
-                      f"removed, whitespace collapsed):", body[:15000]])
+        if not _public_http_url(url):
+            return {**_text(["only public http(s):// URLs"]), "is_error": True}
+        r = await browser.fetch(url, timeout_ms=15000, retries=1)
+        raw = r.html[:500_000]
+        title = re.search(r"<title[^>]*>(.*?)</title>", raw, re.I | re.S)
+        body = await asyncio.to_thread(_trim_html, raw)
+        return _text([f"status: {r.status}", f"final_url: {r.final_url[:300]}",
+                      f"title: {' '.join(title[1].split())[:200] if title else '-'}",
+                      f"cloudflare_challenge: {'yes' if CF_RE.search(raw) else 'no'}", f"error: {r.error or '-'}",
+                      f"html ({min(len(body), 15000)} of {len(body)} chars, from <body, script/style/svg/noscript/"
+                      f"comments and all attributes but href/title removed, whitespace collapsed):", body[:15000]])
 
     @tool("run_parser", "Run our real crawler parser on every configured board of base_url, match enabled "
           "programs, then fetch one detail page and extract magnets.", {"base_url": str}, annotations=ro)
     async def run_parser(args):
         base = args["base_url"].strip().rstrip("/")
-        if not base.startswith(("http://", "https://")):
-            return {**_text(["only http(s):// URLs"]), "is_error": True}
+        if not _public_http_url(base):
+            return {**_text(["only public http(s):// URLs"]), "is_error": True}
         progs, out, first, hit = db.list_programs(conn, enabled_only=True), [f"base_url {base}"], None, None
         for board in site["boards"]:
             r = await browser.fetch(base + board)
@@ -140,8 +162,8 @@ def build_tools(conn, browser, site: dict) -> list:
             posts = crawler.parse_board(r.html, r.final_url)
             matches = [(p, t, u) for t, u in posts if (p := crawler.match_program(t, progs))]
             out.append(f"board {board}: status {r.status}, {len(posts)} posts, {len(matches)} matches")
-            out += [f"  sample: {t} | {u}" for t, u in posts[:3]]
-            out += [f"  match: [{p['name']}] {t} ({crawler.episode_key(t) or '-'})" for p, t, _ in matches[:5]]
+            out += [f"  sample: {t[:120]} | {u[:300]}" for t, u in posts[:3]]
+            out += [f"  match: [{p['name']}] {t[:120]} ({crawler.episode_key(t) or '-'})" for p, t, _ in matches[:5]]
             first = first or (posts[0][1] if posts else None)
             hit = hit or (matches[0][2] if matches else None)
         if not (url := hit or first):
@@ -158,18 +180,13 @@ def build_tools(conn, browser, site: dict) -> list:
     async def probe_domains(args):
         board, out = site["boards"][0] if site["boards"] else "", [f"current {site['url']}"]
         for i, cand in enumerate(crawler.domain_candidates(site["url"]), 1):
-            r = await browser.fetch(cand + board, timeout_ms=15000, retries=0)
+            r = await browser.fetch(cand + board, timeout_ms=15000, retries=1)
             posts = crawler.parse_board(r.html, r.final_url) if r.ok else []
             out.append(f"+{i} {cand}{board}: " + (f"FAIL {_fail(r)}" if not r.ok else
                                                   f"status {r.status}, {len(posts)} posts" + ("  <- works" if posts else "")))
         return _text(out if len(out) > 1 else out + ["no numbered domain to probe"])
 
     return [dns_tls_check, browse, run_parser, probe_domains]
-
-
-def _brief(d: dict, n: int = 80) -> str:
-    s = json.dumps(d, ensure_ascii=False)
-    return s if len(s) <= n else s[:n] + "…"
 
 
 def _user_prompt(conn, site: dict) -> str:
@@ -185,6 +202,10 @@ async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> N
     def emit(s: str) -> None:
         db.append_doctor_progress(conn, report_id, f"{datetime.now():%H:%M:%S} {s}")
 
+    if LOCK.locked():  # no await between this check and the acquire below
+        emit("다른 진단이 실행 중입니다")
+        db.finish_doctor_report(conn, report_id, "error", None, None, None)
+        return
     async with LOCK:
         last = None
         try:
@@ -200,7 +221,8 @@ async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> N
                 if isinstance(m, AssistantMessage):
                     for b in m.content:
                         if isinstance(b, ToolUseBlock) and b.name != "StructuredOutput":
-                            emit(f"tool: {b.name.removeprefix('mcp__doctor__')} {_brief(b.input)}")
+                            emit(f"tool: {b.name.removeprefix('mcp__doctor__')} "
+                                 f"{json.dumps(b.input, ensure_ascii=False)[:80]}")
                         elif isinstance(b, TextBlock) and b.text.strip():
                             emit(f"say: {b.text.strip()[:200]}")
                 elif isinstance(m, UserMessage) and isinstance(m.content, list):
@@ -213,37 +235,29 @@ async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> N
             emit(f"stopped: {e.subtype} {e.errors}")
         except Exception as e:
             emit(f"exception: {e!r}")
-        try:
-            so = last.structured_output if last and not last.is_error else None
-            cost = last.total_cost_usd if last else None
-            if last:
-                emit(f"result: {last.subtype}, turns {last.num_turns}, ${cost or 0:.3f}")
-            if isinstance(so, dict) and so.get("verdict"):
-                db.finish_doctor_report(conn, report_id, "done", so["verdict"], json.dumps(so, ensure_ascii=False), cost)
-            else:
-                emit(f"no structured output ({last.subtype if last else 'no result'})")
-                db.finish_doctor_report(conn, report_id, "error", None, None, cost)
-        except Exception as e:  # last resort so the row never stays 'running'
-            db.finish_doctor_report(conn, report_id, "error", None, None, None)
-            emit(f"exception: {e!r}")
+        so = last.structured_output if last and not last.is_error else None
+        cost = last.total_cost_usd if last else None
+        if last:
+            emit(f"result: {last.subtype}, turns {last.num_turns}, ${cost or 0:.3f}")
+        if isinstance(so, dict) and so.get("verdict"):
+            db.finish_doctor_report(conn, report_id, "done", so["verdict"], json.dumps(so, ensure_ascii=False), cost)
+        else:
+            emit(f"no structured output ({last.subtype if last else 'no result'})")
+            db.finish_doctor_report(conn, report_id, "error", None, None, cost)
 
 
 # routes: async so every db call stays on the event-loop thread
 @router.post("/sites/{id}/doctor")
 async def start_doctor(request: Request, id: int, model: str = Form(...)):
     conn = request.app.state.db
-    if model not in MODELS:
+    if model not in db.MODELS:
         raise HTTPException(400, "model must be sonnet or opus")
     if not (site := db.get_site(conn, id)):
         raise HTTPException(404)
     rid = db.create_doctor_report(conn, id, model)
-    if LOCK.locked():
-        db.append_doctor_progress(conn, rid, "다른 진단이 실행 중입니다")
-        db.finish_doctor_report(conn, rid, "error", None, None, None)
-    else:
-        task = asyncio.create_task(run_doctor(conn, request.app.state.browser, rid, site, model))
-        _tasks.add(task)
-        task.add_done_callback(_tasks.discard)
+    task = asyncio.create_task(run_doctor(conn, request.app.state.browser, rid, site, model))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
     return RedirectResponse(f"/doctor/{rid}", status_code=303)
 
 
@@ -277,35 +291,11 @@ async def apply_fix(request: Request, id: int):
     if r["status"] != "done" or not r["report_json"]:
         raise HTTPException(400, "report is not done")
     fix = json.loads(r["report_json"]).get("suggested_fix") or {}
-    url, boards = fix.get("url"), fix.get("boards")
-    url = url.rstrip("/") if url else None
-    if url is not None and not URL_RE.match(url):
-        raise HTTPException(400, f"bad url: {url}")
-    if boards is not None and not (boards and all(BOARD_RE.match(b) for b in boards)):
-        raise HTTPException(400, f"bad boards: {boards}")
+    site = db.get_site(request.app.state.db, r["site_id"])  # null parts keep the current value
+    try:
+        url, boards = db.clean_site_fields(fix.get("url") or site["url"],
+                                           site["boards"] if fix.get("boards") is None else fix["boards"])
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
     db.update_site(request.app.state.db, r["site_id"], url=url, boards=boards)
     return RedirectResponse("/sites", status_code=303)
-
-
-async def _main() -> None:
-    """python -m app.doctor <site_id> [sonnet|opus] [--break-parser]"""
-    from app import config
-    from app.browser import Browser
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if "--break-parser" in sys.argv:
-        crawler.POST_RE = re.compile(r"/nope$")
-    conn, browser = db.connect(config.DB_PATH), Browser()
-    await browser.start()
-    try:
-        site, model = db.get_site(conn, int(args[0])), args[1] if len(args) > 1 else "sonnet"
-        rid = db.create_doctor_report(conn, site["id"], model)
-        await run_doctor(conn, browser, rid, site, model)
-        r = db.get_doctor_report(conn, rid)
-        print(r["progress"], r["status"], r["verdict"], r["cost_usd"], r["report_json"], sep="\n")
-    finally:
-        await browser.stop()
-        conn.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(_main())

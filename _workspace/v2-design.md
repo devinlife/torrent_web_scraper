@@ -403,6 +403,7 @@ VERDICTS:
 - site_down: TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
 - cloudflare: browse shows a Cloudflare challenge (cloudflare_challenge: yes, often 403/503).
 - parser_broken: browse returns the real board with visible posts, but run_parser finds 0 posts or no magnet.
+If probe_domains marks a candidate "<- works", the verdict is domain_moved even when the configured domain looks blocked or down, and suggested_fix.url is that candidate.
 
 OUTPUT: summary and evidence in Korean. evidence = short factual lines quoting tool output. Put a value in suggested_fix.url or suggested_fix.boards ONLY when a tool result proves it works (e.g. probe_domains "<- works", or run_parser succeeding on that base_url); otherwise null.
 ```
