@@ -273,7 +273,7 @@ form.inline { display: inline; margin: 0; }
 
 fieldset.field { border: 0; padding: 0; margin: 0; }
 fieldset.field > legend { padding: 0; margin-bottom: 6px; color: var(--text-2); font-size: var(--fs-sm); line-height: 18px; font-weight: 600; }
-.checks { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; min-height: 40px; }
+.checks { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; min-height: var(--h-control); }
 .checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
 .checks input { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; }
 .res-edit > summary { list-style: none; margin-left: -10px; } /* text lines up with th (= .btn-sm padding) */

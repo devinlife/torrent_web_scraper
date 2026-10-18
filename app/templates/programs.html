@@ -30,7 +30,7 @@
       <td class="num hide-sm">{{ loop.index }}</td>
       <td>{% if p.enabled %}<strong>{{ p.name }}</strong>{% else %}{{ p.name }}{% endif %}</td>
       <td><details class="res-edit">
-        <summary class="btn btn-ghost btn-sm" aria-label="{{ p.name }} 해상도 수정">{{ "무관" if p.resolution == "any" else sel|join(" · ") }} <span aria-hidden="true">▾</span></summary>
+        <summary class="btn btn-ghost btn-sm">{{ "무관" if p.resolution == "any" else sel|join(" · ") }}<span class="sr-only">, {{ p.name }} 해상도 수정</span> <span aria-hidden="true">▾</span></summary>
         <form method="post" action="/programs/{{ p.id }}/resolution"><div class="checks">
           {% for r in RESOLUTIONS %}<label><input type="checkbox" name="resolution" value="{{ r }}"{{ " checked" if r in sel }}> {{ r }}</label>{% endfor %}
         </div><button class="btn btn-secondary btn-sm">저장</button></form>
