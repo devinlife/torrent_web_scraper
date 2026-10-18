@@ -23,7 +23,8 @@
 {% set fix = data.suggested_fix or {} %}
 {% if fix.url or fix.boards %}
 <h2>수정 제안</h2>
-<form method="post" action="/doctor/{{ report.id }}/apply">
+<form method="post" action="/doctor/{{ report.id }}/apply"
+      onsubmit='return confirm({{ ("사이트 URL을 " ~ (fix.url or site.url) ~ "로 바꿀까요?")|tojson }})'>
   {% if fix.url %}<p>url: <code>{{ fix.url }}</code></p>{% endif %}
   {% if fix.boards %}<p>boards: {% for b in fix.boards %}<code>{{ b }}</code> {% endfor %}</p>{% endif %}
   <button>적용</button>

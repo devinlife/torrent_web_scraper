@@ -102,13 +102,13 @@ def list_programs(conn, enabled_only: bool = False) -> list[dict]:
 def add_program(conn, name: str, resolution: str) -> int:
     name = name.strip()
     if not name:
-        raise ValueError("name is empty")
+        raise ValueError("이름을 입력하세요")
     if resolution not in RESOLUTIONS:
-        raise ValueError(f"bad resolution: {resolution}")
+        raise ValueError(f"해상도가 잘못됐습니다: {resolution}")
     try:
         return conn.execute("INSERT INTO programs(name, resolution) VALUES (?, ?)", (name, resolution)).lastrowid
     except sqlite3.IntegrityError:
-        raise ValueError(f"duplicate name: {name}") from None
+        raise ValueError(f"이미 있는 이름입니다: {name}") from None
 
 
 def set_program_enabled(conn, id: int, enabled: bool) -> None:
@@ -144,11 +144,11 @@ def clean_site_fields(url: str, boards: list[str]) -> tuple[str, list[str]]:
     url = url.strip().rstrip("/")
     boards = [b.strip() for b in boards if b.strip()]
     if not URL_RE.fullmatch(url):
-        raise ValueError("bad url")
+        raise ValueError("URL 형식이 잘못됐습니다")
     if bad := [b for b in boards if not BOARD_RE.fullmatch(b)]:
-        raise ValueError(f"bad board: {bad[0]}")
+        raise ValueError(f"게시판 경로가 잘못됐습니다: {bad[0]}")
     if not boards:
-        raise ValueError("boards empty")
+        raise ValueError("게시판을 하나 이상 입력하세요")
     return url, boards
 
 

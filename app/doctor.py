@@ -17,7 +17,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app import crawler, db
-from app.views import templates
+from app.views import go, templates
 
 router = APIRouter()
 LOCK = asyncio.Lock()
@@ -246,10 +246,11 @@ async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> N
 
 # routes: async so every db call stays on the event-loop thread
 @router.post("/sites/{id}/doctor")
-async def start_doctor(request: Request, id: int, model: str = Form(...)):
+async def start_doctor(request: Request, id: int, model: str | None = Form(None)):
     conn = request.app.state.db
+    model = model or db.get_setting(conn, "doctor_model", "sonnet")
     if model not in db.MODELS:
-        raise HTTPException(400, "model must be sonnet or opus")
+        raise HTTPException(400, "모델은 sonnet 또는 opus만 됩니다.")
     if not (site := db.get_site(conn, id)):
         raise HTTPException(404)
     rid = db.create_doctor_report(conn, id, model)
@@ -287,13 +288,13 @@ async def doctor_progress(request: Request, id: int):
 async def apply_fix(request: Request, id: int):
     r = _report(request, id)
     if r["status"] != "done" or not r["report_json"]:
-        raise HTTPException(400, "report is not done")
+        return go("/sites", "완료된 진단 리포트가 아닙니다")
     fix = json.loads(r["report_json"]).get("suggested_fix") or {}
     site = db.get_site(request.app.state.db, r["site_id"])  # null parts keep the current value
     try:
         url, boards = db.clean_site_fields(fix.get("url") or site["url"],
                                            site["boards"] if fix.get("boards") is None else fix["boards"])
     except ValueError as e:
-        raise HTTPException(400, str(e)) from None
+        return go("/sites", str(e))
     db.update_site(request.app.state.db, r["site_id"], url=url, boards=boards)
-    return RedirectResponse("/sites", status_code=303)
+    return RedirectResponse("/sites?msg=applied", status_code=303)

@@ -4,8 +4,12 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+from http import HTTPStatus
+
 from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import config, db, doctor
 from app.browser import Browser
@@ -37,8 +41,20 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(doctor.router)
 
 
-def page(request: Request, name: str, **ctx):
-    return templates.TemplateResponse(request, name, ctx)
+def page(request: Request, name: str, status_code: int = 200, **ctx):
+    return templates.TemplateResponse(request, name, ctx, status_code=status_code)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    default = exc.detail == HTTPStatus(exc.status_code).phrase  # Starlette's English default, e.g. "Not Found"
+    msg = ("페이지를 찾을 수 없습니다." if exc.status_code == 404 else "요청을 처리할 수 없습니다.") if default else exc.detail
+    return page(request, "error.html", exc.status_code, code=exc.status_code, message=msg)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    return page(request, "error.html", 422, code=422, message="입력값이 올바르지 않습니다.")
 
 
 # dashboard
@@ -67,7 +83,7 @@ async def set_interval(request: Request, minutes: int = Form(ge=1, le=1440)):
 @app.post("/settings/doctor-model")
 async def set_doctor_model(request: Request, model: str = Form()):
     if model not in db.MODELS:
-        raise HTTPException(400, "model must be sonnet or opus")
+        raise HTTPException(400, "모델은 sonnet 또는 opus만 됩니다.")
     db.set_setting(request.app.state.db, "doctor_model", model)
     return go("/sites")
 
@@ -76,7 +92,7 @@ async def set_doctor_model(request: Request, model: str = Form()):
 async def run_detail(request: Request, id: int):
     run = db.get_run(request.app.state.db, id)
     if not run:
-        raise HTTPException(404, "run not found")
+        raise HTTPException(404, "실행 기록이 없습니다.")
     return page(request, "run.html", run=run)
 
 
@@ -109,10 +125,10 @@ async def program_delete(request: Request, id: int):
 
 # sites
 @app.get("/sites")
-async def sites(request: Request, error: str | None = None):
+async def sites(request: Request, error: str | None = None, msg: str | None = None):
     conn = request.app.state.db
     return page(request, "sites.html", sites=db.list_sites(conn), reports=db.latest_doctor_report_per_site(conn),
-                doctor_model=db.get_setting(conn, "doctor_model", "sonnet"), error=error)
+                doctor_model=db.get_setting(conn, "doctor_model", "sonnet"), error=error, msg=msg)
 
 
 @app.post("/sites/{id}/enabled")

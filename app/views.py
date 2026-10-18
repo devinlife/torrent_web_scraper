@@ -49,6 +49,7 @@ def dur(start, end) -> str:
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL)
 templates.env.filters.update(dt=dt, ago=ago, dur=dur)
+templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}  # readable confirm() text
 
 
 def go(path: str, error: str | None = None) -> RedirectResponse:

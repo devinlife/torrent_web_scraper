@@ -4,28 +4,32 @@
 <h1>프로그램</h1>
 {% if error %}<p class="flash">{{ error }}</p>{% endif %}
 <form class="row" method="post" action="/programs">
-  <input name="name" placeholder="프로그램 이름" required>
-  <select name="resolution">
+  <label>이름 <input name="name" placeholder="예: 놀면 뭐하니" required></label>
+  <label>해상도 <select name="resolution">
     <option value="any">무관</option><option value="720p">720p</option><option value="1080p">1080p</option>
-  </select>
-  <button>추가</button>
+  </select></label>
+  <button class="primary">추가</button>
 </form>
+<p class="muted">켜짐 {{ programs|selectattr("enabled")|list|length }} / 전체 {{ programs|length }}</p>
 <div class="table"><table>
-  <tr><th>#</th><th>이름</th><th>해상도</th><th>상태</th><th></th></tr>
+  <tr><th class="num">순서</th><th>이름</th><th>해상도</th><th>상태</th><th></th></tr>
   {% for p in programs %}
   <tr class="{{ '' if p.enabled else 'off' }}">
-    <td>{{ p.id }}</td><td>{{ p.name }}</td><td>{{ "무관" if p.resolution == "any" else p.resolution }}</td>
+    <td class="num">{{ p.id }}</td><td>{{ p.name }}</td><td>{{ "무관" if p.resolution == "any" else p.resolution }}</td>
     <td>
+      {{ "켜짐" if p.enabled else "꺼짐" }}
       <form class="inline" method="post" action="/programs/{{ p.id }}/enabled">
         <input type="hidden" name="enabled" value="{{ 0 if p.enabled else 1 }}">
         <button>{{ "끄기" if p.enabled else "켜기" }}</button>
       </form>
-      {{ "켜짐" if p.enabled else "꺼짐" }}
     </td>
     <td>
-      <form class="inline" method="post" action="/programs/{{ p.id }}/delete"><button>삭제</button></form>
+      <form class="inline" method="post" action="/programs/{{ p.id }}/delete"
+            onsubmit='return confirm({{ ("「" ~ p.name ~ "」을 삭제할까요? 다운로드 기록은 남습니다.")|tojson }})'>
+        <button class="danger">삭제</button></form>
     </td>
   </tr>
+  {% else %}<tr><td colspan="5" class="muted">위에서 프로그램을 추가하세요.</td></tr>
   {% endfor %}
 </table></div>
 <p class="muted">매칭: 이름의 모든 단어가 제목에 포함되고 해상도가 맞으면(무관은 전부) 다운로드합니다.</p>
