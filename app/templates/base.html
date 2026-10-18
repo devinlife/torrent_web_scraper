@@ -12,7 +12,7 @@
 {% block head %}{% endblock %}
 </head>
 <body>
-{% set p = request.url.path %}{% set cur = "/sites" if p.startswith(("/sites", "/doctor")) else "/programs" if p.startswith("/programs") else "/" %}
+{% set p = request.url.path %}{% set cur = none if code is defined else "/sites" if p.startswith(("/sites", "/doctor")) else "/programs" if p.startswith("/programs") else "/" %}
 <header class="topbar"><div class="wrap">
   <a class="brand" href="/">torrent</a>
   <nav class="nav" aria-label="주 메뉴">{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}</nav>

@@ -6,7 +6,7 @@
 <div class="page-head">
   <div><h1>프로그램</h1><p class="sub">켜짐 {{ n_on }} · 전체 {{ programs|length }} · 위에 있을수록 먼저 매칭됩니다</p></div>
 </div>
-{{ flash(error=error) }}
+{{ flash(error=error, msg=msg) }}
 
 <section class="card">
   <header class="card-head"><h2>새 프로그램</h2></header>
@@ -27,12 +27,12 @@
     <thead><tr><th class="num">순서</th><th class="wide">이름</th><th class="hide-sm">해상도</th><th class="grow">켜기</th><th class="end"><span class="sr-only">삭제</span></th></tr></thead>
     <tbody>{% for p in programs %}{% set res = "무관" if p.resolution == "any" else p.resolution %}
     <tr{% if not p.enabled %} class="off"{% endif %}>
-      <td class="num">{{ p.id }}</td>
+      <td class="num">{{ loop.index }}</td>
       <td>{% if p.enabled %}<strong>{{ p.name }}</strong>{% else %}{{ p.name }}{% endif %}<span class="show-sm sub">{{ res }}</span></td>
       <td class="hide-sm">{{ res }}</td>
       <td><form class="switch-wrap" method="post" action="/programs/{{ p.id }}/enabled">
         <input type="hidden" name="enabled" value="{{ 0 if p.enabled else 1 }}">
-        <button class="switch" role="switch" aria-checked="{{ 'true' if p.enabled else 'false' }}" aria-label="{{ p.name }} {{ '끄기' if p.enabled else '켜기' }}"></button>
+        <button class="switch" role="switch" aria-checked="{{ 'true' if p.enabled else 'false' }}" aria-label="{{ p.name }} 사용"></button>
         <span aria-hidden="true">{{ "켜짐" if p.enabled else "꺼짐" }}</span>
       </form></td>
       <td class="end"><form class="inline" method="post" action="/programs/{{ p.id }}/delete"

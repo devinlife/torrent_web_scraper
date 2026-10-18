@@ -26,7 +26,7 @@
     </div>
     <form class="switch-wrap" method="post" action="/sites/{{ s.id }}/enabled">
       <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
-      <button class="switch" role="switch" aria-checked="{{ 'true' if s.enabled else 'false' }}" aria-label="{{ s.name }} {{ '끄기' if s.enabled else '켜기' }}"></button>
+      <button class="switch" role="switch" aria-checked="{{ 'true' if s.enabled else 'false' }}" aria-label="{{ s.name }} 사용"></button>
       <span aria-hidden="true">{{ "켜짐" if s.enabled else "꺼짐" }}</span>
     </form>
   </header>

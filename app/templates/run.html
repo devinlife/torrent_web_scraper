@@ -7,7 +7,8 @@
   <div><h1 class="title-row">실행 #{{ run.id }} {{ badge(run.status) }}</h1>
     <p class="sub">{{ run.started|dt }} 시작 · {{ run.started|dur(run.finished) }} · 매칭 {{ run.matched }} · 추가 {{ run.added }}</p></div>
 </div>
-{% if run.status in ("error", "partial") %}<div class="flash flash-bad" role="status"><span>실패한 사이트가 있습니다.</span><a href="/sites">사이트 확인 →</a></div>{% endif %}
+{% if "interrupted by restart" in run.log %}<div class="flash flash-info" role="status"><span>서버가 다시 시작되어 중단된 실행입니다. 사이트 문제가 아닙니다.</span></div>
+{% elif run.status in ("error", "partial") %}<div class="flash flash-bad" role="status"><span>실패한 사이트가 있습니다.</span><a href="/sites">사이트 확인 →</a></div>{% endif %}
 {% set log = run.log.strip() %}{% set lines = log.splitlines()|length %}
 <section class="card">
   <header class="card-head"><h2>로그</h2><span class="muted num">{{ "{:,}".format(lines) }}줄</span></header>

@@ -97,7 +97,7 @@ async def set_doctor_model(request: Request, model: str = Form()):
     if model not in db.MODELS:
         raise HTTPException(400, "모델은 sonnet 또는 opus만 됩니다.")
     db.set_setting(request.app.state.db, "doctor_model", model)
-    return go("/sites")
+    return go("/sites", msg="model")
 
 
 @app.get("/runs/{id}")
@@ -110,8 +110,8 @@ async def run_detail(request: Request, id: int):
 
 # programs
 @app.get("/programs")
-async def programs(request: Request, error: str | None = None):
-    return page(request, "programs.html", programs=db.list_programs(request.app.state.db), error=error)
+async def programs(request: Request, error: str | None = None, msg: str | None = None):
+    return page(request, "programs.html", programs=db.list_programs(request.app.state.db), error=error, msg=msg)
 
 
 @app.post("/programs")
@@ -120,7 +120,7 @@ async def add_program(request: Request, name: str = Form(), resolution: str = Fo
         db.add_program(request.app.state.db, name, resolution)
     except ValueError as e:
         return go("/programs", str(e))
-    return go("/programs")
+    return go("/programs", msg="added")
 
 
 @app.post("/programs/{id}/enabled")
