@@ -151,7 +151,7 @@ async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> N
 ### app/main.py (B), see section 6. Public surface: `app: FastAPI`.
 
 ## 2. Domain probe: where and how
-- **Scheduler**: when the first board of a site is not usable (fetch not ok, or 0 posts), it tries `crawler.domain_candidates(site["url"])` in order. Each try is `browser.fetch(cand + boards[0], timeout_ms=15000, retries=0)`. The first candidate whose result is `.ok` and has `parse_board(...)` non-empty wins. On a win: `db.update_site(conn, id, url=cand)`, log `domain moved`, reuse that board result, and continue with the new URL.
+- **Scheduler**: when the first board of a site is not usable (fetch not ok, or 0 posts), it tries `crawler.domain_candidates(site["url"])` in order. Each try is `browser.fetch(cand + boards[0], timeout_ms=15000, retries=1)`. The first candidate whose result is `.ok` and has `parse_board(...)` non-empty wins. Before accepting a win, it re-fetches the original `base + boards[0]` once (`timeout_ms=15000, retries=0`): if that now has posts, it logs `recovered, not moving` and keeps the original URL and those posts, because a transient error must not move the site to a live mirror. Otherwise, on a win: `db.update_site(conn, id, url=cand)` (skipped under dry-run), log `domain moved`, reuse that board result, and continue with the new URL.
 - **Doctor tool `probe_domains`**: the same loop, but it reports every candidate and writes nothing.
 - A parked domain that answers 200 with no posts does not count as a win.
 
@@ -260,12 +260,14 @@ def latest_doctor_report_per_site(conn) -> dict[int, dict]                 # sit
 ```
 rid = db.create_run(conn); log = []; matched = added = 0; site_fail = soft_fail = False
 L(msg) = log.append(f"{datetime.now():%H:%M:%S} {msg}")
+move(site, old, new) = dry_run ? L(f"site {site.name}: would move {old} -> {new} (dry-run)")   # dry-run writes only the run row
+                      : (db.update_site(conn, site.id, url=new); L(f"site {site.name}: domain moved {old} -> {new}")); return new
 try:
   sites = db.list_sites(conn, enabled_only=True); progs = db.list_programs(conn, enabled_only=True)
   if not sites or not progs: L("nothing to do (no enabled sites/programs)"); status = "ok"; goto finish
   seen = set(); tr_down = False; ok_sites = 0
   for site in sites:
-    base = site.url; site_ok = True
+    base = site.url; site_ok = True; site_any = False
     for i, board in enumerate(site.boards):
       r = await browser.fetch(base + board)
       posts = crawler.parse_board(r.html, r.final_url) if r.ok else []
@@ -273,12 +275,18 @@ try:
         L(f"site {site.name}: {board} FAIL {r.error or f'HTTP {r.status}' if not r.ok else '0 posts'}")
         L(f"site {site.name}: probing +1..+5")
         for cand in crawler.domain_candidates(base):
-          r = await browser.fetch(cand + board, timeout_ms=15000, retries=0)
+          r = await browser.fetch(cand + board, timeout_ms=15000, retries=1)
           posts = crawler.parse_board(r.html, r.final_url) if r.ok else []
-          if posts: db.update_site(conn, site.id, url=cand); L(f"site {site.name}: domain moved {base} -> {cand}"); base = cand; break
+          if posts:
+            r0 = await browser.fetch(base + board, timeout_ms=15000, retries=0)      # confirm the original is still down
+            if r0.ok and (p0 := crawler.parse_board(r0.html, r0.final_url)): L(f"site {site.name}: {board} recovered, not moving"); r, posts = r0, p0
+            else: base = move(site, base, cand)
+            break
         else: L(f"site {site.name}: probe failed"); site_ok = False; break      # skip remaining boards
       elif not posts:
         L(f"site {site.name}: {board} FAIL {...same reason...}"); site_ok = False; continue
+      if i == 0 and origin(r.final_url) != base: base = move(site, base, origin(r.final_url))   # followed a redirect
+      site_any = True
       L(f"site {site.name}: {board} -> {len(posts)} posts")
       for title, url in posts:
         if url in seen: continue
@@ -301,14 +309,16 @@ try:
         db.add_download(conn, h, p.id, ep, title, site.name)       # recorded for "duplicate" too
         if res == "added": added += 1
         L(f"  {res} {h}")
-    if site_ok: db.update_site(conn, site.id, last_ok_at=db.now()); ok_sites += 1
-    else: site_fail = True
+    if site_any: (dry_run or db.update_site(conn, site.id, last_ok_at=db.now())); ok_sites += 1   # one working board is enough
+    site_fail = site_fail or not site_ok
   status = "error" if ok_sites == 0 else "partial" if (site_fail or soft_fail) else "ok"
 except Exception as e:
   logging.exception("run failed"); L(f"exception: {e!r}"); status = "error"
 finish: L(f"done: matched={matched} added={added} status={status}")
 db.finish_run(conn, rid, status, matched, added, "\n".join(log)); return rid
 ```
+Dry-run rule: `dry_run` persists nothing but the run record (`create_run`/`finish_run`). It skips Transmission adds, `add_download`, both domain moves (logged as `would move ... (dry-run)`) and `last_ok_at`.
+
 Status rule:
 - `ok`: every enabled site and board worked and no detail or Transmission step failed.
 - `partial`: at least one site worked, but some site, detail or Transmission step failed.

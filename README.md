@@ -103,6 +103,8 @@ docker compose run --rm scraper python -m app.scheduler --dry-run   # 실제 크
 docker compose logs -f
 ```
 
+dry-run은 Transmission 추가와 사이트 URL 변경을 하지 않지만 실행 기록은 남기므로, 다음 정기 실행 시각이 그만큼 뒤로 밀린다. 스케줄에 맞춰 돌아야 할 때는 실행하지 않는다.
+
 ## 범위 밖
 
 사용자 인증과 외부 노출, 알림, 페이지네이션, 사이트별 전용 파서, Doctor 자동 수정, Pi에서의 실행, Cloudflare 사람 인증 우회.

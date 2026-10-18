@@ -25,6 +25,14 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
     def L(msg: str) -> None:
         log.append(f"{datetime.now():%H:%M:%S} {msg}")
 
+    def move(site, old: str, new: str) -> str:  # dry-run persists nothing but the run record
+        if dry_run:
+            L(f"site {site['name']}: would move {old} -> {new} (dry-run)")
+        else:
+            db.update_site(conn, site["id"], url=new)
+            L(f"site {site['name']}: domain moved {old} -> {new}")
+        return new
+
     try:
         sites, progs = db.list_sites(conn, enabled_only=True), db.list_programs(conn, enabled_only=True)
         if not sites or not progs:
@@ -46,9 +54,15 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                             r = await browser.fetch(cand + board, timeout_ms=15000, retries=1)
                             posts = crawler.parse_board(r.html, r.final_url) if r.ok else []
                             if posts:
-                                db.update_site(conn, site["id"], url=cand)
-                                L(f"site {name}: domain moved {base} -> {cand}")
-                                base = cand
+                                # a transient error on the original (seen: ~20 s ERR_CONNECTION_CLOSED) must not
+                                # move the site to a live mirror, so confirm the original is still down first
+                                r0 = await browser.fetch(base + board, timeout_ms=15000, retries=0)
+                                p0 = crawler.parse_board(r0.html, r0.final_url) if r0.ok else []
+                                if p0:
+                                    L(f"site {name}: {board} recovered, not moving")
+                                    r, posts = r0, p0
+                                else:
+                                    base = move(site, base, cand)
                                 break
                         else:
                             L(f"site {name}: probe failed")
@@ -59,9 +73,7 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                         site_ok = False
                         continue
                     if i == 0 and (origin := "{0.scheme}://{0.netloc}".format(urlsplit(r.final_url))) != base:
-                        db.update_site(conn, site["id"], url=origin)  # followed a redirect to a new domain
-                        L(f"site {name}: domain moved {base} -> {origin}")
-                        base = origin
+                        base = move(site, base, origin)  # followed a redirect to a new domain
                     site_any = True
                     L(f"site {name}: {board} -> {len(posts)} posts")
                     for title, url in posts:
@@ -108,7 +120,8 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                             added += 1
                         L(f"  {res} {h}")
                 if site_any:  # one working board is enough; a failed later board only makes the run partial
-                    db.update_site(conn, site["id"], last_ok_at=db.now())
+                    if not dry_run:
+                        db.update_site(conn, site["id"], last_ok_at=db.now())
                     ok_sites += 1
                 site_fail = site_fail or not site_ok
             status = "error" if ok_sites == 0 else "partial" if (site_fail or soft_fail) else "ok"
