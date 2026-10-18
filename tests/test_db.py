@@ -65,6 +65,21 @@ def test_migrate_old_programs_check(tmp_path):
     db.connect(path).close()  # second connect: no rebuild
 
 
+def test_migrate_adds_site_pages(tmp_path):
+    path = tmp_path / "app.db"
+    old = sqlite3.connect(path)
+    old.executescript(db.DDL.replace(",\n  " + db.PAGES_COL, ""))
+    old.execute("INSERT INTO sites(name, url) VALUES ('a', 'https://a.com')")
+    old.commit()
+    old.close()
+    conn = db.connect(path)
+    assert db.get_site(conn, 1)["pages"] == 3
+    db.update_site(conn, 1, pages=5)
+    assert db.get_site(conn, 1)["pages"] == 5
+    with pytest.raises(sqlite3.IntegrityError):
+        db.update_site(conn, 1, pages=11)
+
+
 def test_stale_marking_and_progress(tmp_path):
     path = tmp_path / "app.db"
     conn = db.connect(path)

@@ -75,6 +75,13 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                     if i == 0 and (origin := "{0.scheme}://{0.netloc}".format(urlsplit(r.final_url))) != base:
                         base = move(site, base, origin)  # followed a redirect to a new domain
                     site_any = True
+                    for n in range(2, site["pages"] + 1):  # all seeded sites page with ?page=N
+                        rn = await browser.fetch(f"{base}{board}{'&' if '?' in board else '?'}page={n}")
+                        more = crawler.parse_board(rn.html, rn.final_url) if rn.ok else []
+                        if not more:  # an older page is a bonus; failing it doesn't fail the board
+                            L(f"site {name}: {board} page {n} FAIL {_why(rn)}")
+                            break
+                        posts += more
                     L(f"site {name}: {board} -> {len(posts)} posts")
                     for title, url in posts:
                         if url in seen:

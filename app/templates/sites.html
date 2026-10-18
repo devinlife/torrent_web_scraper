@@ -54,6 +54,8 @@
         <label class="field"><span>URL</span><input class="input" type="url" name="url" value="{{ s.url }}" required></label>
         <label class="field"><span>게시판 경로 (한 줄에 하나)</span>
           <textarea class="textarea" name="boards" rows="{{ s.boards|length + 1 }}">{{ s.boards|join("\n") }}</textarea></label>
+        <label class="field"><span>읽을 페이지 수 (게시판마다 1~N쪽)</span>
+          <input class="input" type="number" name="pages" value="{{ s.pages }}" min="1" max="10" required></label>
         <div class="form-actions"><button class="btn btn-primary">저장</button></div>
       </form>
     </details>

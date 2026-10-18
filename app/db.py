@@ -11,10 +11,13 @@ CREATE TABLE IF NOT EXISTS {}(
   resolution TEXT NOT NULL DEFAULT 'any' CHECK (resolution <> ''),
   enabled INTEGER NOT NULL DEFAULT 1);
 """
+# board list pages read per crawl (?page=1..N)
+PAGES_COL = "pages INTEGER NOT NULL DEFAULT 3 CHECK (pages BETWEEN 1 AND 10)"
 DDL = PROGRAMS_DDL.format("programs") + """
 CREATE TABLE IF NOT EXISTS sites(
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, url TEXT NOT NULL,
-  boards TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, last_ok_at TEXT);
+  boards TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, last_ok_at TEXT,
+  """ + PAGES_COL + """);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS runs(
   id INTEGER PRIMARY KEY, started TEXT NOT NULL, finished TEXT,
@@ -68,6 +71,8 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(DDL)
     _migrate_programs(conn)
+    if "pages" not in {r[1] for r in conn.execute("PRAGMA table_info(sites)")}:
+        conn.execute("ALTER TABLE sites ADD COLUMN " + PAGES_COL)
     conn.executemany("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", SEED_SETTINGS)
     if not conn.execute("SELECT 1 FROM programs LIMIT 1").fetchone():
         conn.executemany("INSERT INTO programs(name, resolution, enabled) VALUES (?, ?, ?)", SEED_PROGRAMS)
@@ -161,9 +166,9 @@ def get_site(conn, id: int) -> dict | None:
 
 
 def update_site(conn, id: int, *, url: str | None = None, boards: list[str] | None = None,
-                enabled: bool | None = None, last_ok_at: str | None = None) -> None:
+                pages: int | None = None, enabled: bool | None = None, last_ok_at: str | None = None) -> None:
     fields = {"url": url, "boards": None if boards is None else json.dumps(boards),
-              "enabled": None if enabled is None else int(enabled), "last_ok_at": last_ok_at}
+              "pages": pages, "enabled": None if enabled is None else int(enabled), "last_ok_at": last_ok_at}
     fields = {k: v for k, v in fields.items() if v is not None}
     if fields:
         sets = ", ".join(f"{k}=?" for k in fields)

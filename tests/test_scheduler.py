@@ -131,3 +131,22 @@ def test_interval_min_5(tmp_path):
     asyncio.run(go())
     started = datetime.fromisoformat(db.get_run(conn, rid)["started"])
     assert s.next_run_at == started + timedelta(minutes=5)
+
+
+def test_older_board_pages_are_crawled(tmp_path):
+    conn = db.connect(tmp_path / "app.db")
+    db.update_site(conn, 1, boards=["/v-4-16"])
+    for i in (2, 3):
+        db.update_site(conn, i, enabled=False)
+    # the matching post has slid to page 2; page 1 shows other posts
+    page1 = FetchResult(200, "https://torrentsome268.com/v-4-16", '<a href="/v/1">other show</a>', None)
+    b = FakeBrowser({"https://torrentsome268.com/v-4-16": [page1],
+                     "https://torrentsome268.com/v-4-16?page=2": ["torrentsome/board.html"]})
+    run = db.get_run(conn, asyncio.run(run_once(conn, b, add_magnet=lambda m: "added")))
+    assert run["added"] == 1 and run["status"] == "ok", run["log"]
+    assert "https://torrentsome268.com/v-4-16?page=3" in b.urls and "page 3 FAIL" in run["log"]
+
+    db.update_site(conn, 1, pages=1)  # this site set to page 1 only
+    b = FakeBrowser()
+    asyncio.run(run_once(conn, b, dry_run=True))
+    assert not [u for u in b.urls if "?page=" in u]

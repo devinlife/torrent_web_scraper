@@ -160,10 +160,12 @@ async def site_enabled(request: Request, id: int, enabled: str = Form()):
 
 
 @app.post("/sites/{id}")
-async def site_edit(request: Request, id: int, url: str = Form(), boards: str = Form("")):
+async def site_edit(request: Request, id: int, url: str = Form(), boards: str = Form(""), pages: int = Form(3)):
     try:
         url, lines = db.clean_site_fields(url, boards.splitlines())
+        if not 1 <= pages <= 10:
+            raise ValueError("읽을 페이지 수는 1~10입니다")
     except ValueError as e:
         return go("/sites", str(e))
-    db.update_site(request.app.state.db, id, url=url, boards=lines)
+    db.update_site(request.app.state.db, id, url=url, boards=lines, pages=pages)
     return go("/sites", msg="applied")
