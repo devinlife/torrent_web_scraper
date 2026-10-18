@@ -1,0 +1,12 @@
+services:
+  scraper:
+    build: .
+    image: torrent-web-scraper
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data
+    env_file: .env
+    init: true
+    shm_size: 1gb
+    restart: unless-stopped

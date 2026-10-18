@@ -1,0 +1,25 @@
+[project]
+name = "torrent-web-scraper"
+version = "2.0.0"
+description = "Torrent board crawler with a web UI; adds magnets to Transmission"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk",
+    "fastapi",
+    "jinja2",
+    "playwright==1.48.0", # must match the browsers in the Docker base image
+    "python-multipart",
+    "uvicorn",
+]
+
+[tool.uv]
+exclude-newer = "2026-10-04T00:00:00Z"
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
