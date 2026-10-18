@@ -30,10 +30,18 @@ def _err(e: Error) -> str:
     return str(e).split("\n", 1)[0][:200]
 
 
+BLOCKED = {"image", "media", "font"}  # CSS and JS stay: some boards render with JS, Cloudflare checks need it
+
+
+async def _block_assets(route) -> None:
+    await (route.abort() if route.request.resource_type in BLOCKED else route.continue_())
+
+
 class Browser:
     # ponytail: one global lock, one page at a time; ~3 s/page is fine for ~15 pages/run.
-    def __init__(self, settle_ms: int = 2000, gap_s: tuple[float, float] = (2.0, 5.0)) -> None:
-        self.settle_ms, self.gap_s = settle_ms, gap_s
+    def __init__(self, settle_ms: int = 2000, gap_s: tuple[float, float] = (2.0, 5.0),
+                 block_assets: bool = True) -> None:
+        self.settle_ms, self.gap_s, self.block_assets = settle_ms, gap_s, block_assets
         self._last: dict[str, float] = {}  # host -> monotonic time its last fetch finished
         self._lock = asyncio.Lock()
         self._pw = self._browser = self._ctx = None
@@ -43,7 +51,10 @@ class Browser:
         if self._pw is None:
             self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(headless=False, args=["--headless=new", "--no-sandbox"])
-        self._ctx = await self._browser.new_context(locale="ko-KR")
+        ctx = await self._browser.new_context(locale="ko-KR")
+        if self.block_assets:  # here, so crash recovery's new context gets it too
+            await ctx.route("**/*", _block_assets)
+        self._ctx = ctx
 
     async def stop(self) -> None:
         for obj in (self._ctx, self._browser, self._pw):

@@ -99,7 +99,8 @@ class FetchResult:
     def ok(self) -> bool: return self.error is None and 200 <= self.status < 400
 
 class Browser:
-    def __init__(self, settle_ms: int = 2000, gap_s: tuple[float, float] = (2.0, 5.0)) -> None
+    def __init__(self, settle_ms: int = 2000, gap_s: tuple[float, float] = (2.0, 5.0),
+                 block_assets: bool = True) -> None
     async def start(self) -> None       # async_playwright().start(); launch; new_context
     async def stop(self) -> None        # close context/browser/playwright; idempotent
     async def fetch(self, url: str, *, timeout_ms: int = 30000, retries: int = 2) -> FetchResult
@@ -110,6 +111,7 @@ Launch, exactly as in the research:
 self._browser = await self._pw.chromium.launch(headless=False, args=["--headless=new", "--no-sandbox"])
 self._ctx = await self._browser.new_context(locale="ko-KR")
 ```
+With `block_assets` (default), `start()` also adds `ctx.route("**/*", ...)` that aborts `image`, `media` and `font` requests and continues the rest. Stylesheets and scripts stay loaded (JS-rendered boards, Cloudflare checks). Because it lives in `start()`, crash recovery re-applies it.
 
 `fetch` does the following:
 - The whole call, including retries, runs under `async with self._lock`, a single `asyncio.Lock`.

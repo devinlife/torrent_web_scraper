@@ -41,3 +41,18 @@ def test_same_host_is_paced(monkeypatch):
         await b.fetch("https://a.com/3")  # gap already elapsed
     asyncio.run(go())
     assert sleeps == [2.0]
+
+
+def test_block_assets_handler():
+    class Route:
+        def __init__(self, kind):
+            self.request, self.did = type("Q", (), {"resource_type": kind})(), None
+
+        async def abort(self): self.did = "abort"
+        async def continue_(self): self.did = "continue"
+
+    for kind, want in [("image", "abort"), ("font", "abort"), ("media", "abort"),
+                       ("document", "continue"), ("script", "continue"), ("stylesheet", "continue")]:
+        r = Route(kind)
+        asyncio.run(B._block_assets(r))
+        assert r.did == want, kind
