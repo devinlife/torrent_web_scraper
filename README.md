@@ -17,6 +17,8 @@ Mac (OrbStack)
 
 Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크롤링은 Mac의 Docker에서 하고 Pi는 Transmission만 맡는다. 국내 SNI 차단 때문에 curl, requests 같은 일반 HTTP 클라이언트는 TLS 단계에서 끊긴다. ECH를 지원하는 Chromium `--headless=new`만 통과하고, Playwright 기본 headless shell은 ECH가 없어 실패한다.
 
+이미지는 `python:3.12.15-slim-bookworm` 위에 멀티 스테이지로 만든다. 빌드 단계에서 uv로 `.venv`를 만들고, 실행 단계에는 `.venv`와 `app/`만 복사한 뒤 `playwright install --with-deps chromium`으로 전체판 Chromium과 그 시스템 라이브러리만 설치한다(`/ms-playwright`). Firefox, WebKit, uv는 넣지 않는다. 크기는 약 1.5GB이고, 대부분 Chromium(약 590MB)과 Doctor가 쓰는 Claude Code 실행 파일이 든 claude-agent-sdk(약 230MB)다. dev와 prod는 같은 Dockerfile을 쓴다. Alpine은 Playwright Chromium이 musl을 지원하지 않아 쓸 수 없다.
+
 ## 설치와 실행
 
 1. `.env.example`을 `.env`로 복사하고 값을 채운다(권한 600 권장).

@@ -24,6 +24,8 @@ TRANSMISSION_PASSWORD: str = os.environ.get("TRANSMISSION_PASSWORD", "")
 
 Environments. Both run in Docker on the Mac from the same image build and share `.env`; `server.sh <dev|prod> <cmd>` wraps `docker compose -f <file>`.
 
+Image. One multi-stage `Dockerfile`. The build stage (`python:3.12.15-slim-bookworm` + uv 0.8.22) runs `uv sync --frozen --no-dev`. The runtime stage uses the same base, so the venv's python symlink resolves. It copies only `/app/.venv` and `app/`, then runs `playwright install --with-deps chromium` with `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`. Playwright 1.48 ships only the full Chromium, with no separate headless shell, which `--headless=new` needs for ECH. Firefox, WebKit and uv are not in the image. The slim base already has `tzdata`, and `TZ=Asia/Seoul` applies. The image is about 1.5GB (it was 2.9GB on the `mcr.microsoft.com/playwright/python` base). `.dockerignore` keeps `.git`, `.venv`, `data`, `_workspace`, `tests` and `.env` out of the build context.
+
 | | dev | prod |
 |---|---|---|
 | compose file / project | `compose.dev.yaml` / `torrent_web_scraper-dev` | `compose.yaml` / `torrent_web_scraper` |
