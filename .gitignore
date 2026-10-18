@@ -108,5 +108,5 @@ venv.bak/
 *swp
 *swo
 
-# v2 runtime data
+# runtime data
 data/

@@ -11,7 +11,7 @@ Checked on 2026-10-18 against the installed source (`.venv/.../claude_agent_sdk/
 | Structured output | Supported. `output_format={"type":"json_schema","schema":{...}}`. The parsed dict lands in `ResultMessage.structured_output`. It still works with `tools=[]`. |
 | Budget | `max_budget_usd` exists. When the budget is hit you get `ResultMessage(subtype="error_max_budget_usd", is_error=True)` and then the iterator **raises `ResultError`**. |
 | `model="sonnet"` | Accepted. It resolved to `claude-sonnet-5-5` in the `init` message. |
-| Transmission from the container | **Not reachable.** The container cannot reach any LAN host (Pi, router); it can reach the Mac and the internet. From the Mac host the snippet works: version 2.94, 23 torrents. See section 8. |
+| Transmission from the container | Works once macOS Local Network permission is granted to OrbStack. Without it the container cannot reach any LAN host (Pi, router). See section 8. |
 
 ## 1. Imports and signatures
 
@@ -305,9 +305,9 @@ def rpc(method, **arguments):
 | Where | Result |
 |---|---|
 | Mac host | Reachable. `version` 2.94 (d8e60ee44f), `rpc-version` 15, `download-dir` `/home/pi/S_Samba/X_Torrent/temp_bucket`, `torrent-get` count 23. |
-| Container | **Not reachable.** `URLError: timed out` on TCP connect to `192.168.0.10:59090`. |
+| Container | Reachable when OrbStack has Local Network permission; otherwise `URLError: timed out` on TCP connect to `192.168.0.10:59090`. |
 
-What the container network checks showed:
+Container network checks without Local Network permission:
 
 | Target | Result |
 |---|---|
@@ -320,4 +320,4 @@ What the container network checks showed:
 - The same timeout happens with `--network host`, which in OrbStack means the VM itself.
 - There is no subnet clash: the Docker networks are 192.168.97–215.x and the LAN is 192.168.0.0/24.
 
-**Diagnosis.** The OrbStack VM is blocked from the Mac's local network, while internet traffic goes through. This is most likely the macOS **Local Network privacy** permission: System Settings → Privacy & Security → Local Network → enable OrbStack, then restart OrbStack. A less likely cause is that the Mac has two interfaces on 192.168.0.0/24 (en1 Wi-Fi .76 and en10 Ethernet .74). I did not change any system setting. Re-run `/work/tr.py` in the container after the fix.
+**Cause.** macOS **Local Network privacy** blocks the OrbStack VM from the LAN while internet traffic goes through. Fix: System Settings → Privacy & Security → Local Network → enable OrbStack, then restart OrbStack.

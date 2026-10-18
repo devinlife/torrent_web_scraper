@@ -1,16 +1,16 @@
-# v2 Design: implementation contract
+# Design: implementation contract
 
-Sources, in order of precedence: research (`research-crawler.md`, `research-sdk.md`) > `v2-arch-constraints.md` > `v2-plan.md`. Fixture checks behind the numbers here were run on 2026-10-18 with stdlib `html.parser`.
+Sources, in order of precedence: research (`research-crawler.md`, `research-sdk.md`) > `arch-constraints.md` > `plan.md`. Fixture checks behind the numbers here were run on 2026-10-18 with stdlib `html.parser`.
 
 Global rules (everyone):
-- Python 3.12, pinned via `.python-version`. No new runtime dependencies. Add pytest as a dev dependency with `uv add --dev pytest`. Add `[tool.pytest.ini_options] pythonpath = ["."]` to `pyproject.toml`; without it `import app` fails from `tests/`.
+- Python 3.12, pinned via `.python-version`. No runtime dependencies beyond those in `pyproject.toml`; pytest is the only dev dependency. `[tool.pytest.ini_options] pythonpath = ["."]` lets `tests/` import `app`.
 - Timestamps come from `db.now()`, which returns `datetime.now().isoformat(timespec="seconds")` (local time, TZ=Asia/Seoul).
 - All `db.*` calls happen on the event-loop thread only. Never call them inside `asyncio.to_thread`.
 - Secrets never go into logs, reports or the progress text.
 
 ## 1. Module contracts
 
-### app/config.py (A)
+### app/config.py
 ```python
 DATA_DIR: Path = Path(os.environ.get("DATA_DIR", "./data"))
 DB_PATH: Path = DATA_DIR / "app.db"
@@ -20,7 +20,7 @@ TRANSMISSION_PASSWORD: str = os.environ.get("TRANSMISSION_PASSWORD", "")
 ```
 `main.py` holds the single `logging.basicConfig(level=logging.INFO)` line.
 
-### app/crawler.py (A): pure functions, no I/O
+### app/crawler.py: pure functions, no I/O
 ```python
 POST_RE = re.compile(r'/(?:v/\d+|torrent/[a-z0-9]+\.html|t/(?!\d+\.html)[A-Za-z0-9]+\.html)$')
 EP_RE   = re.compile(r'(?<![A-Za-z0-9])E(\d{1,4})(?:\.(\d{6}))?(?!\d)')
@@ -47,7 +47,7 @@ Measured counts on the fixtures (this algorithm, exactly): some 42, rj 37, zota 
 
 **`match(title, program)`** returns:
 `all(w in t for w in program["name"].lower().split()) and (program["resolution"] == "any" or program["resolution"] in t)`, where `t = title.lower()`.
-This is substring matching, the same as the legacy `title_checker`. The release-group filter is dropped.
+This is substring matching. There is no release-group filter.
 
 **`match_program`** returns the first program (in the given order) for which `match` is true, else `None`.
 
@@ -71,7 +71,7 @@ return (f"E{m[1]}.{m[2]}" if m[2] else f"E{m[1]}") if m else None
 
 None of these functions raise on bad HTML. `HTMLParser` is lenient.
 
-### app/browser.py (A)
+### app/browser.py
 ```python
 @dataclass(frozen=True)
 class FetchResult:
@@ -112,7 +112,7 @@ self._ctx = await self._browser.new_context(locale="ko-KR")
 
 `# ponytail: one global lock, one page at a time; ~3 s/page is fine for ~15 pages/run.`
 
-### app/transmission.py (A)
+### app/transmission.py
 ```python
 class TransmissionError(Exception): ...
 def rpc(method: str, **arguments) -> dict
@@ -123,7 +123,7 @@ def add_magnet(magnet: str) -> str
 - `add_magnet` calls `rpc("torrent-add", filename=magnet)`. It returns `"added"` when `"torrent-added"` is in the result, `"duplicate"` when `"torrent-duplicate"` is, and otherwise raises `TransmissionError`.
 - It is blocking. Callers use `await asyncio.to_thread(add_magnet, m)`.
 
-### app/scheduler.py (A)
+### app/scheduler.py
 ```python
 async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run: bool = False) -> int  # returns run id; never raises
 class Scheduler:
@@ -139,9 +139,9 @@ class Scheduler:
 ```
 Full algorithm in section 4.
 
-`if __name__ == "__main__":` supports `python -m app.scheduler --dry-run`. It opens `db.connect(config.DB_PATH)`, starts a `Browser`, calls `run_once(..., dry_run="--dry-run" in sys.argv)`, prints `get_run(id)["log"]` and stops the browser. Without the flag it does a real run (Transmission adds, domain moves). Total is about 10 lines.
+`if __name__ == "__main__":` supports `python -m app.scheduler --dry-run`. It opens `db.connect(config.DB_PATH)`, starts a `Browser`, calls `run_once(..., dry_run="--dry-run" in sys.argv)`, prints `get_run(id)["log"]` and stops the browser. Without the flag it does a real run (Transmission adds, domain moves).
 
-### app/doctor.py (C), see section 5. Public surface
+### app/doctor.py, see section 5. Public surface
 ```python
 router: APIRouter
 LOCK: asyncio.Lock
@@ -152,14 +152,14 @@ def _public_http_url(url: str) -> bool               # SSRF guard (tested)
 def _trim_html(h: str) -> str                        # board-sized HTML for the model (tested)
 ```
 
-### app/main.py (B), see section 6. Public surface: `app: FastAPI`.
+### app/main.py, see section 6. Public surface: `app: FastAPI`.
 
 ## 2. Domain probe: where and how
 - **Scheduler**: when the first board of a site is not usable (fetch not ok, or 0 posts), it tries `crawler.domain_candidates(site["url"])` in order. Each try is `browser.fetch(cand + boards[0], timeout_ms=15000, retries=1)`. The first candidate whose result is `.ok` and has `parse_board(...)` non-empty wins. Before accepting a win, it re-fetches the original `base + boards[0]` once (`timeout_ms=15000, retries=0`): if that now has posts, it logs `recovered, not moving` and keeps the original URL and those posts, because a transient error must not move the site to a live mirror. Otherwise, on a win: `db.update_site(conn, id, url=cand)` (skipped under dry-run), log `domain moved`, reuse that board result, and continue with the new URL.
 - **Doctor tool `probe_domains`**: the same loop, but it reports every candidate and writes nothing.
 - A parked domain that answers 200 with no posts does not count as a win.
 
-## 3. Database (app/db.py, A)
+## 3. Database (app/db.py)
 
 Connection strategy: `sqlite3.connect(path, check_same_thread=False, isolation_level=None)` (autocommit), `row_factory=sqlite3.Row`, `PRAGMA journal_mode=WAL`, `PRAGMA foreign_keys=ON`. Calls are synchronous, with no `to_thread`. Queries take well under 1 ms. Keeping every call on the event-loop thread means the single shared connection is never used concurrently, so no locking is needed.
 
@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS doctor_reports(
 CREATE INDEX IF NOT EXISTS downloads_added_at ON downloads(added_at);
 CREATE INDEX IF NOT EXISTS doctor_reports_site ON doctor_reports(site_id, id);
 ```
-`progress` is part of `CREATE TABLE` because no v2 database exists yet. If a later column is needed, add it with `ALTER TABLE` inside try/except.
+There is no migration tool. A new column is added with `ALTER TABLE ... ADD COLUMN` inside try/except.
 
 Seeding:
 - Settings use `INSERT OR IGNORE` on every connect.
@@ -355,7 +355,7 @@ while True:
 - **Wake during a run**: `trigger_now()` returns `False` while `running` and does nothing, and the dashboard shows "already running". `set_interval` during a run just sets the event; the new interval takes effect after the run finishes.
 - There is no `await` between the due check and `_wake.clear()`, so a wake can't be lost.
 
-## 5. Doctor (app/doctor.py, C)
+## 5. Doctor (app/doctor.py)
 
 ### Tools
 They are built per run by `build_tools(conn, browser, site)` (called inside `run_doctor`) as closures over `conn`, `browser` and `site`, then wrapped with `create_sdk_mcp_server("doctor", tools=[...])`. All are annotated `ToolAnnotations(readOnlyHint=True)`, and `browse` also gets `maxResultSizeChars=20000`.
@@ -486,7 +486,7 @@ Background tasks are kept in a module-level set: `_tasks: set[asyncio.Task]`, wi
 - the summary and the evidence `<ul>`
 - the suggested fix with an [적용] form (POST apply), shown only if `url` or `boards` is non-null
 
-## 6. main.py and templates (B)
+## 6. main.py and templates
 
 Lifespan:
 ```python
@@ -531,13 +531,13 @@ Templates and the context each receives (every template also gets `request`):
 
   Above the table, one doctor-model default form (POST `/settings/doctor-model`).
 - `run.html`: `run`, with the log in `<pre>`.
-- `doctor.html` (C): see section 5.
+- `doctor.html`: see section 5.
 
 ## 7. Tests
 
 All tests run offline on the fixtures in `tests/fixtures/`.
 
-`tests/test_crawler.py` (A):
+`tests/test_crawler.py`:
 ```python
 SITES = {  # key: (board base_url, expected unique posts, E348 url)
  "torrentsome": ("https://torrentsome268.com/v-4-16", 42, "https://torrentsome268.com/v/311439"),
@@ -568,7 +568,7 @@ HASH = "4e4d86cbee91db107def6d3fd24271afd28130e2"
    - `https://torrenttt253.top` gives `254…258`.
    - `https://example.com` gives `[]`.
 
-`tests/test_db.py` (A), using a `tmp_path / "app.db"` file:
+`tests/test_db.py`, using a `tmp_path / "app.db"` file:
 1. `test_seed_and_rules`:
    - Calling `connect` twice gives 17 programs and 5 sites; enabled programs are {놀면 뭐하니, 라디오스타}, enabled sites are 3.
    - `interval_min == "60"`, `doctor_model == "sonnet"`, and site 1's boards come back as the list `["/v-4-16", "/v-2-13", "/v-4-17"]`.
@@ -577,12 +577,12 @@ HASH = "4e4d86cbee91db107def6d3fd24271afd28130e2"
 3. `test_stale_marking_and_progress`: two `append_doctor_progress` calls give 2 lines. After a reconnect, the `running` run and doctor report are both `error`, and `latest_doctor_report_per_site` returns that report.
 4. `test_clean_site_fields`: `" https://x.com/ "` with `["/a", "", " /b "]` gives `("https://x.com", ["/a", "/b"])`. `https://x.com?`, `[]`, blank-only boards, a board with an embedded newline, a board without a leading `/`, and `ftp://` each raise `ValueError`.
 
-`tests/test_doctor.py` (C):
+`tests/test_doctor.py`:
 1. `test_public_http_url_rejects[url]`, 7 cases: `http://127.0.0.1/`, `http://localhost:8080/`, `http://host.docker.internal/`, `http://2130706433/`, `http://0x7f.1/`, `file:///etc/passwd`, `http://[::1]/`.
 2. `test_public_http_url_accepts`: `https://torrentsome268.com/v-4-16` passes.
 3. `test_trim_html_keeps_posts`: the rj board after `_trim_html(...)[:15000]` (what `browse` sends) has no `<script`, is shorter than the raw HTML, and `parse_board` still finds at least 20 posts in it.
 
-`tests/test_scheduler.py` (A):
+`tests/test_scheduler.py`:
 - `FakeBrowser(script=None)` records every URL it is asked for. `script` maps a URL to a list of results returned in order (the last one repeats); an entry is a fixture path (served as `FetchResult(200, url, html, None)`) or a `FetchResult` such as `DOWN = FetchResult(0, "", "", "net::ERR_CONNECTION_CLOSED")`. Otherwise `PAGES` maps the some and zota board URLs and both E348 detail URLs to fixtures, and unknown URLs get `FetchResult(0, url, "", "net::ERR_NAME_NOT_RESOLVED")`.
 - `_moved_site` sets site 1 to `https://torrentsome266.com` with boards `["/v-4-16"]` (so 268 is the +2 candidate) and disables sites 2 and 3.
 1. `test_run_once_adds_once`: site 1 gets `["/v-4-16"]`, site 2 (zota) `["/t/4/16.html"]`, site 3 disabled; the fake `add_magnet` appends and returns `"added"`. Run 1: `ok`, `added == 1`, exactly one btih magnet, zota skipped by `skip: episode exists` without fetching its detail page. Run 2: `added == 0`, no new add call, no detail URL fetched.
@@ -594,43 +594,41 @@ HASH = "4e4d86cbee91db107def6d3fd24271afd28130e2"
 
 That is 22 test functions in 4 files; `uv run pytest -q` reports 56 passed with the parametrized cases.
 
-## 8. Verification checklist (plan section 12)
+## 8. Verification
 
-All steps were verified on 2026-10-18.
-
-| step | command | expected | verified |
-|---|---|---|---|
-| 2 | `uv run pytest -q` (Mac) | All pass, no network used. | 56 passed |
-| 2 | `docker compose run --rm scraper python -m app.scheduler --dry-run` | Lines `site 토렌트썸: /v-4-16 -> N posts` for 9 boards (3 sites × 3). A `match [놀면 뭐하니] ...` line with `dry-run: would add <hash>` (later sites say `skip: episode exists` only if a real add happened). Final `done: ... status=ok`. The run record is kept, so the next scheduled run moves back. | yes |
-| 3 | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` | yes |
-| 3 | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:4e4d86cbee91db107def6d3fd24271afd28130e2'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. | `duplicate` observed; a real `added` was not, because no new episode existed |
-| 3 | In the container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94` | reachable; RPC round trip verified |
-| 3 | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow at that interval. Set it back to 60. | runs observed 2 min apart |
-| 4 | Browser at http://127.0.0.1:8080 | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. | yes |
-| 5 | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. | `ok`, $0.055, 5 turns |
-| 5 | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. | `blocked`, $0.028, 6 turns |
-| 5 | Temporarily point a site at a stale domain number and run doctor | `domain_moved`, `suggested_fix.url` = the `<- works` candidate | `domain_moved`, $0.013, 5 turns |
-| 5 | Temporarily change `POST_RE` to `r'/nope$'`, `docker compose up -d --build`, run doctor on 토렌트좋다 | `parser_broken`. Revert and rebuild. | verified by the implementer |
-| 5 | Double-click [doctor] | The second report ends `error` with `다른 진단이 실행 중입니다`. | yes |
-| 5 | `docker compose restart` while a doctor runs | The report row becomes `error` with `interrupted by restart`. | yes |
-| 6 | `/programs` | 17 rows, 2 enabled. Legacy files deleted (constraints section 8), README rewritten, `data/` in `.gitignore`. | yes |
+| area | command | expected |
+|---|---|---|
+| tests | `uv run pytest -q` (Mac) | All pass, no network used. |
+| crawl | `docker compose run --rm scraper python -m app.scheduler --dry-run` | Lines `site 토렌트썸: /v-4-16 -> N posts` for 9 boards (3 sites × 3). A `match [놀면 뭐하니] ...` line with `dry-run: would add <hash>` (later sites say `skip: episode exists` only if a real add happened). Final `done: ... status=ok`. The run record is kept, so the next scheduled run moves back. |
+| transmission | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
+| transmission | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:<hash>'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. |
+| transmission | In the container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
+| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 2 min apart. Set it back to 60. |
+| web | Browser at http://127.0.0.1:8080 | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. |
+| doctor | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. |
+| doctor | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. |
+| doctor | Temporarily point a site at a stale domain number and run doctor | `domain_moved`, `suggested_fix.url` = the `<- works` candidate |
+| doctor | Temporarily change `POST_RE` to `r'/nope$'`, `docker compose up -d --build`, run doctor on 토렌트좋다 | `parser_broken`. Revert and rebuild. |
+| doctor | Double-click [doctor] | The second report ends `error` with `다른 진단이 실행 중입니다`. |
+| doctor | `docker compose restart` while a doctor runs | The report row becomes `error` with `interrupted by restart`. |
+| seed | `/programs` on a fresh database | 17 rows, 2 enabled. |
 
 Troubleshooting: if the container cannot reach the Pi (macOS System Settings → Privacy & Security → Local Network → OrbStack is off; enable it and restart OrbStack), runs log `transmission FAIL ... timed out`, end `partial`, and record no downloads, so the add is retried next run.
 
-## 9. Open decisions
+## 9. Design decisions
 
 1. **`parse_board` returns sidebar links too** (42/37/49/50/30, not 20). The research says this is harmless and dedup handles it. Tests pin the exact counts, which also guards against regressions.
-2. **The scheduler caps waits at 60 s and re-checks the wall clock.** This fixes a correctness bug: the monotonic clock stops during Mac sleep, so "nothing special" would fire hours late.
+2. **The scheduler caps waits at 60 s and re-checks the wall clock.** The monotonic clock stops during Mac sleep, so an uncapped wait would fire hours late.
 3. **`next_run_at` comes from the last run's `started` in the database.** Restarts don't crawl again; a first boot crawls immediately.
-4. **`add_magnet` returns `"added" | "duplicate"` and raises `TransmissionError`.** The brief asked for this, and the constraints now say the same. A duplicate still inserts a downloads row so it is never retried.
+4. **`add_magnet` returns `"added" | "duplicate"` and raises `TransmissionError`.** A duplicate still inserts a downloads row so it is never retried.
 5. **`db` functions take `conn` explicitly instead of using a module global.** This keeps tests isolated and leaves `app.state` as the only global state. Calls are synchronous, for the reason in section 3.
-6. **A busy doctor creates an `error` report with a message** instead of disabling the button. The check sits in `run_doctor` right before `async with LOCK` with no `await` between them (review fix for a race in the route), so the route only creates the report and spawns the task. A double click was verified to give a second `error` report.
+6. **A busy doctor creates an `error` report with a message** instead of disabling the button. The check sits in `run_doctor` right before `async with LOCK` with no `await` between them, so check and acquire cannot race; the route only creates the report and spawns the task.
 7. **Doctor completion uses the `HX-Refresh: true` header** instead of a second fragment template, so there is one template.
-8. **`dry_run` plus `python -m app.scheduler --dry-run`.** Step 2 needs it. Without the flag the module does a real run.
+8. **`dry_run` plus `python -m app.scheduler --dry-run`.** It runs a real crawl without side effects. Without the flag the module does a real run.
 9. **After the first `TransmissionError` in a run, remaining adds are skipped.** This avoids N × 10 s timeouts. Status becomes `partial`.
 10. **A board with 0 posts counts as a failure, and the domain probe runs only on the first board's failure.** A 200 with no posts is the parser-broken or parked-domain signal.
-11. **Engine B boards are `/c/4/16`, `/c/2/13`, `/c/4/17`** (the research recommendation) instead of the plan's `/c/4`. The `/c/4/16` page has no fixture; the step-2 dry-run covers it.
-12. **The doctor prompt says that a failing real-SNI TLS check is normal.** The constraints' original "TLS reset → blocked candidate" heuristic would label every working site blocked, because plain TLS is SNI-reset for all of them, and the fake-SNI comparison did not discriminate on Cloudflare-hosted sites. Reachability is judged by `browse`.
+11. **Engine B boards are `/c/4/16`, `/c/2/13`, `/c/4/17`**, not the combined 영상·음악 board `/c/4` (research section 2). The `/c/4/16` page has no fixture; a dry-run covers it.
+12. **The doctor prompt says that a failing real-SNI TLS check is normal.** Plain TLS is SNI-reset for every site, working or not, and the fake-SNI comparison does not discriminate on Cloudflare-hosted sites, so a TLS reset is not evidence of blocking. Reachability is judged by `browse`.
 13. **`ON DELETE SET NULL` with `foreign_keys=ON`.** Otherwise a reused program id would inherit a deleted program's episode history.
 14. **Episode `None` is stored as NULL**, so those posts are de-duplicated by hash only.
 15. **Confirm the original before moving.** A winning probe candidate is accepted only after one re-fetch of the original board (`retries=0`) still has no posts. Observed: ~20 s bursts of `ERR_CONNECTION_CLOSED`, and the sites keep many live numbered mirrors, so a transient error would otherwise move a healthy site.

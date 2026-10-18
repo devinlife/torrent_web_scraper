@@ -1,16 +1,11 @@
-# torrent_web_scraper v2 기획안
-
-작성일: 2026-10-18 · 브랜치: `refactor/fastapi-docker`
+# torrent_web_scraper 기획안
 
 ## 1. 목표
 
 Mac의 Docker에서 실행되는 웹 서비스입니다. 등록한 TV 프로그램의 새 회차를 토렌트 사이트에서 찾아 Pi의 Transmission에 자동으로 추가합니다. 사이트가 고장나면 Claude가 원인을 진단합니다.
 
-- **v1의 문제**: 2025-10-13 이후 다운로드가 한 건도 없습니다. 원인은 세 가지입니다.
-  - torrentsir 도메인이 사라졌습니다.
-  - 국내 SNI 차단으로 스크립트가 사이트에 접속하지 못합니다.
-  - Pi가 Raspbian 10 Buster(armv7 32bit)라서 최신 도구를 쓸 수 없습니다.
-- **v2의 방향**: 크롤링은 Mac에서 하고 Pi는 다운로드(Transmission)만 합니다. 설정과 기록은 코드 수정 대신 웹 화면에서 관리합니다.
+- **제약**: 국내 SNI 차단 때문에 일반 HTTP 클라이언트로는 사이트에 접속할 수 없습니다. Pi는 Raspbian 10 Buster(armv7 32bit)라서 최신 도구를 쓸 수 없습니다.
+- **방향**: 크롤링은 Mac에서 하고 Pi는 다운로드(Transmission)만 합니다. 설정과 기록은 코드 수정 대신 웹 화면에서 관리합니다.
 
 ## 2. 검증된 사실 (2026-10-18 실측)
 
@@ -108,7 +103,7 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 | `downloads` | info_hash (PK), program_id, episode, title, site, added_at. `UNIQUE(program_id, episode)` |
 | `doctor_reports` | id, site_id, started, status, model, verdict, report_json, cost_usd, progress(진행 로그) |
 
-비밀값(Claude 토큰, Transmission 계정)은 `.env`에만 둡니다. `.env`는 이미 준비되어 있고(권한 600) git 추적에서 제외되어 있습니다.
+비밀값(Claude 토큰, Transmission 계정)은 `.env`에만 둡니다(권한 600, git 추적 제외).
 
 ## 8. 초기 데이터
 
@@ -124,11 +119,11 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 
 게시판은 사이트마다 예능(`4/16`), 한국드라마(`2/13`), 다큐·교양(`4/17`) 3개입니다. 시사 게시판은 따로 없고 시사 프로그램은 다큐·교양에 올라옵니다.
 
-**프로그램**: Pi의 기존 규칙 17개를 모두 가져오되 놀면 뭐하니와 라디오스타만 켜고 나머지는 꺼 둡니다. 방영 여부를 모르는 프로그램을 켜 두면 원치 않는 다운로드가 생길 수 있기 때문입니다. 필요한 것은 화면에서 켭니다.
+**프로그램**: 17개를 넣되 놀면 뭐하니와 라디오스타만 켜고 나머지는 꺼 둡니다. 방영 여부를 모르는 프로그램을 켜 두면 원치 않는 다운로드가 생길 수 있기 때문입니다. 필요한 것은 화면에서 켭니다.
 
 라디오스타, 돌싱포맨, PD 수첩(720p), 나 혼자 산다, 미운 우리 새끼, SBS 스페셜(720p), 그것이 알고 싶다, 금쪽 같은(720p), 놀면 뭐하니, 나는 솔로, 전지적, 유 퀴즈, 알쓸인잡, 지구오락실, 태어난, 애프터시그널, 사랑은 계속된다
 
-- 기존 규칙의 릴리즈 그룹 필터(NEXT)는 없앱니다. 같은 회차가 다른 릴리즈로 다시 받아지는 것은 F3의 회차 중복 방지로 막습니다.
+- 릴리즈 그룹 필터는 두지 않습니다. 같은 회차가 다른 릴리즈로 다시 받아지는 것은 F3의 회차 중복 방지로 막습니다.
 
 ## 9. 배포와 운영
 
@@ -138,7 +133,7 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 - 컨테이너가 LAN의 Pi에 닿으려면 macOS 로컬 네트워크 권한에서 OrbStack을 허용해야 합니다. 꺼져 있으면 실행 기록에 `transmission FAIL ... timed out`이 남고 상태가 `partial`이 됩니다.
 - 웹 UI는 인증이 없으므로 이 Mac(127.0.0.1:8080)에서만 열립니다.
 
-## 10. 범위 밖 (v2에서 하지 않는 것)
+## 10. 범위 밖
 
 - 사용자 인증과 외부 노출
 - 알림
@@ -157,17 +152,6 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 | 번호만 다른 미러 도메인이 여러 개 살아 있음 | 첫 게시판이 실패할 때만 +1..+5를 탐색하고, 원래 URL이 여전히 실패할 때만 옮깁니다 |
 | ISP가 ECH까지 차단할 가능성 | 그때는 VPN이나 프록시 같은 다른 접속 경로가 필요합니다. 현재는 대응 범위 밖입니다 |
 | OAuth 토큰 사용 | 본인이 개인적으로 쓰는 범위로 한정합니다. 다른 사람에게 서비스로 제공하면 정책상 API 키가 필요합니다 |
-
-## 12. 구현 단계
-
-| # | 작업 | 확인 방법 | 결과 |
-|---|---|---|---|
-| 1 | Docker 골격 | 컨테이너에서 3개 사이트 접속, Agent SDK 동작 | 완료 |
-| 2 | 크롤러와 테스트 | 테스트 통과, dry-run 매칭 결과 확인 | 완료: `uv run pytest -q` 56개 통과, dry-run 매칭 확인 |
-| 3 | DB, 스케줄러, RPC | 1건 실제 추가 후 Pi Transmission에서 확인, 주기 변경 즉시 반영 | 완료: 컨테이너에서 RPC 왕복 확인. 새 회차가 없어 실제 `added`는 관찰하지 못했고 `duplicate` 응답을 확인. 2분 주기 실행 확인 |
-| 4 | 웹 화면 | 브라우저에서 등록 → 실행 → 기록 확인 | 완료 |
-| 5 | Doctor | 정상 사이트는 `ok`, 막힌 사이트(torrenttop)는 `blocked`, 파서를 일부러 망가뜨리면 `parser_broken` | 완료: `ok`, `blocked`, `domain_moved`, `parser_broken` 모두 확인 |
-| 6 | 초기 데이터 이전과 옛 코드 정리 | `/programs`에 17개 표시, README 갱신 | 완료 |
 
 ## 부록 A. 사이트 점검 결과 (2026-10-18)
 
@@ -189,4 +173,3 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 
 - Raspberry Pi 4 Model B 2GB, Raspbian 10 Buster armv7l, Python 3.7.3, Chromium 92(ECH 없음), Kodi 실행 중
 - Transmission 2.94, RPC 포트 59090, 다운로드 경로 `/home/pi/S_Samba/X_Torrent/temp_bucket`
-- 기존 크롤러의 cron 작업은 2026-10-18에 주석 처리했습니다(백업: `~/crontab.backup.20261018`).

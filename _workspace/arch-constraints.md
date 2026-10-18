@@ -1,6 +1,6 @@
-# v2 아키텍처 제약 (PL/Architect 지시서)
+# 아키텍처 제약
 
-이 문서는 `_workspace/v2-plan.md`를 구현으로 옮길 때 모든 에이전트가 지켜야 할 결정 사항이다. 플랜과 충돌하면 이 문서가 우선한다. 조사 결과(`research-crawler.md`, `research-sdk.md`)와 충돌하면 조사 결과(실측)가 우선하되 그 사실을 보고한다.
+이 문서는 `plan.md`를 구현할 때 지키는 결정 사항이다. 플랜과 충돌하면 이 문서가 우선한다. 조사 결과(`research-crawler.md`, `research-sdk.md`)와 충돌하면 조사 결과(실측)가 우선한다.
 
 ## 1. 원칙
 
@@ -15,7 +15,7 @@
 | 파일 | 책임 | 의존 |
 |---|---|---|
 | `app/config.py` | 환경변수 읽기(`DATA_DIR`, `TRANSMISSION_*`), 상수 | 없음 |
-| `app/db.py` | `sqlite3` 연결, DDL(`CREATE TABLE IF NOT EXISTS`), 시드, 얇은 쿼리 함수, 사이트 입력 검증(`URL_RE`, `BOARD_RE`, `MODELS`, `clean_site_fields`; 웹 폼과 Doctor [적용]이 공유, 리뷰 반영) | 없음(경로는 호출자가 `config.DB_PATH`로 넘김) |
+| `app/db.py` | `sqlite3` 연결, DDL(`CREATE TABLE IF NOT EXISTS`), 시드, 얇은 쿼리 함수, 사이트 입력 검증(`URL_RE`, `BOARD_RE`, `MODELS`, `clean_site_fields`; 웹 폼과 Doctor [적용]이 공유) | 없음(경로는 호출자가 `config.DB_PATH`로 넘김) |
 | `app/browser.py` | Playwright Chromium(`--headless=new`) 1개 인스턴스, `asyncio.Lock`으로 동시 1개 보장, `fetch(url, *, timeout_ms, retries) -> FetchResult(status, final_url, html, error)`. 페이지 이동(navigation) 실패로 예외를 던지지 않음 | 없음 |
 | `app/crawler.py` | **순수 함수**: 게시판 HTML→(제목, href) 목록, 제목 매칭, 회차 키 추출, 상세 HTML→magnet/해시 정규화, 도메인 번호 탐색 후보 생성. I/O 없음 | 없음 |
 | `app/transmission.py` | `urllib.request`로 RPC. 409 세션 갱신. `add_magnet(magnet) -> "added" \| "duplicate"`, 실패는 모두 `TransmissionError` | config |
@@ -51,11 +51,11 @@
 - `sites.boards`는 JSON 문자열(`["/v-4-16", "/v-4-17"]`). 시드는 예능, 한국드라마, 다큐·교양 3개 경로(시사 게시판은 없고 시사 프로그램은 다큐·교양에 있음).
 - `settings`는 `key TEXT PRIMARY KEY, value TEXT`. 기본값: `interval_min=60`, `doctor_model=sonnet`.
 - 타임스탬프는 ISO 8601 문자열, 로컬시간(TZ=Asia/Seoul, 컨테이너 ENV에 이미 있음).
-- `doctor_reports.report_json`은 SDK 구조화 출력 전체를 그대로 저장. `progress` 컬럼(TEXT, 줄바꿈 구분)으로 재시작 후에도 진행 로그를 볼 수 있게 한다. v2 DB가 처음이라 `CREATE TABLE`에 포함하고 ALTER는 필요 없다.
+- `doctor_reports.report_json`은 SDK 구조화 출력 전체를 그대로 저장. `progress` 컬럼(TEXT, 줄바꿈 구분)으로 재시작 후에도 진행 로그를 볼 수 있게 한다.
 - `db.connect`는 시작할 때 `running`으로 남은 `runs`와 `doctor_reports` 행을 `error`로 표시한다(재시작으로 끊긴 실행).
 - 마이그레이션 도구 없음. 스키마 변경은 `CREATE TABLE IF NOT EXISTS` + 필요 시 `ALTER TABLE ... ADD COLUMN`을 try/except로.
-- 시드는 테이블이 비어 있을 때만. 프로그램 17개는 **놀면 뭐하니, 라디오스타만 enabled=1**, 나머지는 0으로 가져온다(플랜 8절과 같은 결정: 방영 여부를 모르는 프로그램을 켜 두면 원치 않는 다운로드가 생길 수 있어 꺼 두는 쪽이 안전하다).
-- 해상도: 옛 규칙에서 `["720"]`이던 것은 `720p`, `[None]`은 `any`로 매핑. 플랜 8절 표기에 따라 PD 수첩, SBS 스페셜, 금쪽 같은은 `720p`, 나머지는 `any`.
+- 시드는 테이블이 비어 있을 때만. 프로그램 17개는 **놀면 뭐하니, 라디오스타만 enabled=1**, 나머지는 0이다(플랜 8절: 방영 여부를 모르는 프로그램을 켜 두면 원치 않는 다운로드가 생길 수 있어 꺼 두는 쪽이 안전하다).
+- 해상도: 플랜 8절 표기에 따라 PD 수첩, SBS 스페셜, 금쪽 같은은 `720p`, 나머지는 `any`.
 
 ## 5. Doctor
 
@@ -63,7 +63,7 @@
 - 도구 4개(`dns_tls_check`, `browse`, `run_parser`, `probe_domains`)는 모두 읽기 전용. `browse`와 `run_parser`, `probe_domains`는 `browser.py` 인스턴스를 lock과 함께 사용한다.
 - `dns_tls_check`는 `socket.getaddrinfo` + `ssl` 표준 라이브러리로 DNS, TCP, TLS(실제 SNI, 가짜 SNI `www.google.com`) 결과를 사실로만 돌려준다. 실측 결과 실제 SNI TLS는 정상 사이트에서도 모두 리셋되므로(ISP 차단) 차단 근거가 아니고, 가짜 SNI 비교도 Cloudflare 호스팅 사이트에서는 구분이 안 된다. 접속 가능 여부는 `browse`로 판단하며 시스템 프롬프트에 이 사실을 명시한다. 판정은 Claude가 한다.
 - `probe_domains`가 `<- works` 후보를 보고하면 판정은 `domain_moved`이고 그 후보가 `suggested_fix.url`이다.
-- `browse`와 `run_parser`는 공개 http(s) 호스트명만 연다. IP 리터럴, localhost, `.internal`, `.local`은 거부한다(SSRF 방지, 리뷰 반영). 도구 출력은 길이를 제한한다(`browse` HTML 15000자 등).
+- `browse`와 `run_parser`는 공개 http(s) 호스트명만 연다. IP 리터럴, localhost, `.internal`, `.local`은 거부한다(SSRF 방지). 도구 출력은 길이를 제한한다(`browse` HTML 15000자 등).
 - 진행 로그: `doctor_reports.progress`에 append하고 화면은 htmx로 2초 폴링. SSE 금지(불필요).
 - 한도: `max_turns=15`, 비용 상한 `max_budget_usd=1.0`. 모델은 별칭 `sonnet`/`opus`.
 - 출력 스키마: `{"verdict": enum[ok,domain_moved,blocked,site_down,cloudflare,parser_broken], "summary": str, "evidence": [str], "suggested_fix": {"url": str|null, "boards": [str]|null}}`.
@@ -77,15 +77,10 @@
 - 인증 없음(127.0.0.1 바인딩이 경계). CSRF 토큰 없음(개인용, 같은 이유).
 - 대시보드의 [지금 실행]은 스케줄러의 Event를 set해서 즉시 깨운다. 실행 중 중복 실행 방지는 `asyncio.Lock`.
 - 스케줄러는 대기를 60초 이하로 잘라 매번 벽시계를 다시 확인한다. Mac이 잠자는 동안 asyncio의 monotonic 시계가 멈춰서, 긴 대기 한 번은 몇 시간 늦게 깨기 때문이다.
-- 라우트는 모두 `async def`. DB 호출이 이벤트 루프 스레드에서만 일어나게 하기 위해서다(리뷰 반영).
+- 라우트는 모두 `async def`. DB 호출이 이벤트 루프 스레드에서만 일어나게 하기 위해서다.
 
 ## 7. 테스트와 검증
 
 - 단위 테스트는 네트워크 없이 `tests/fixtures/`의 실제 HTML로. `uv run pytest`가 Mac에서 바로 돌아야 한다.
 - 통합 검증은 `docker compose up`한 컨테이너에 대해 수행: 사이트 3곳 크롤 → Transmission `torrent-add` 왕복(새 회차가 없으면 `duplicate` 응답으로 확인) → Doctor 판정 4종(`ok`, `blocked`(torrenttop226.com 등 차단 사이트), `domain_moved`, `parser_broken`).
 - 비밀값은 로그·리포트·커밋에 절대 넣지 않는다.
-
-## 8. 정리
-
-- v1 코드(`scraper/`, `utils/`, `torrent_web_scraper.py`, `requirements.txt`, `setup_script.sh`, `execute_scrapers.sh`, `local_config/`, `docs/*.drawio`)는 6단계에서 삭제했다. README는 v2 기준으로 다시 썼다.
-- `.gitignore`에 `data/`를 추가했다.

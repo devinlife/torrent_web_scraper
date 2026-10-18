@@ -1,4 +1,4 @@
-# torrent_web_scraper v2
+# torrent_web_scraper
 
 등록한 TV 프로그램의 새 회차를 토렌트 게시판에서 찾아 Pi의 Transmission에 자동으로 추가하는 개인용 크롤러다. 사이트가 고장나면 Claude(Doctor)가 원인을 진단한다.
 
@@ -92,7 +92,7 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 초기 데이터는 테이블이 비어 있을 때만 들어간다.
 
 - 사이트 5곳: 토렌트썸, 토렌트좋다, 토렌트티티(켬), 토렌트알지, 토렌트밤(끔, 예비). 게시판은 사이트마다 예능·오락, 한국드라마, 다큐·교양 3개.
-- 프로그램 17개: v1 Pi 규칙을 가져왔다. 놀면 뭐하니와 라디오스타만 켜져 있다.
+- 프로그램 17개. 놀면 뭐하니와 라디오스타만 켜져 있다.
 
 ## 개발
 
@@ -108,7 +108,3 @@ dry-run은 Transmission 추가와 사이트 URL 변경을 하지 않지만 실�
 ## 범위 밖
 
 사용자 인증과 외부 노출, 알림, 페이지네이션, 사이트별 전용 파서, Doctor 자동 수정, Pi에서의 실행, Cloudflare 사람 인증 우회.
-
-## v1 소개
-
-[Torrent_web_scraper: 토렌트 자동 다운로드 프로젝트 소개/설치](https://devinlife.com/project%20torrnet_web_scraper/torrent-web-scraper/)
