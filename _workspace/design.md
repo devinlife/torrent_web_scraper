@@ -493,14 +493,15 @@ Background tasks are kept in a module-level set: `_tasks: set[asyncio.Task]`, wi
 |---|---|---|---|
 | POST `/sites/{id}/doctor` | `model` ∈ `db.MODELS`, else 400 | 404 if no site. Only `rid = create_doctor_report` and spawn `run_doctor` as a task in `_tasks`; the busy check is inside `run_doctor`. | 303 `/doctor/{rid}` |
 | GET `/doctor/{id}` | | 404 if no report. Renders `doctor.html` with `report`, `site`, `data` (`json.loads(report_json)` or None). | 200 |
-| GET `/doctor/{id}/progress` | | Returns `<pre id="progress" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{escaped progress}</pre>`, built inline with `html.escape`. When status ≠ running, the same `<pre>` comes back without `hx-*` attributes plus the header `HX-Refresh: true`, so the page reloads with the full report. | 200 |
-| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 400. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 400. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites` |
+| GET `/doctor/{id}/progress` | | Returns `<pre id="progress" class="log" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{logmark(progress)}</pre>`, built inline (same element as in `doctor.html`). When status ≠ running, the same `<pre>` comes back without `hx-*` attributes plus the header `HX-Refresh: true`, so the page reloads with the full report. | 200 |
+| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 400. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 400. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites?msg=applied` |
 
-`doctor.html` extends `base.html`. It loads `<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-…" crossorigin="anonymous">` (SRI) in `{% block head %}` and shows:
-- the verdict badge, model, cost (`%.3f`), and started time
-- the `<pre id=progress>`, polling only while running
-- the summary and the evidence `<ul>`
-- the suggested fix with an [적용] form (POST apply), shown only if `url` or `boards` is non-null
+`doctor.html` extends `base.html`. While running it loads `<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-…" crossorigin="anonymous">` (SRI) in `{% block head %}`. It shows (layout: `_workspace/design-spec.md` §5.6):
+- model, started time, and cost (`%.3f`) or "진행 중 · 상한 $1"
+- a verdict hero card with the summary
+- the suggested fix as a 현재/제안 table with [이 설정으로 변경] (POST apply), only if `url` or `boards` is non-null; otherwise the current settings
+- the evidence list
+- the `<pre id="progress" class="log">`: polling inside an open card while running, inside a collapsed `<details>` when finished (open on `error`)
 
 ## 6. main.py and templates
 
@@ -528,26 +529,27 @@ await sched.stop(); await browser.stop(); conn.close()
 | POST `/programs/{id}/delete` | | `delete_program` | 303 `/programs` |
 | GET `/sites` | | `sites.html` | |
 | POST `/sites/{id}/enabled` | `enabled` ("1"/"0") | `update_site(enabled=)` | 303 `/sites` |
-| POST `/sites/{id}` | `url`, `boards` (one per line) | `db.clean_site_fields(url, boards.splitlines())`, which also rejects empty boards; `ValueError` gives `?error=<msg>` | 303 `/sites` |
+| POST `/sites/{id}` | `url`, `boards` (one per line) | `db.clean_site_fields(url, boards.splitlines())`, which also rejects empty boards; `ValueError` gives `?error=<msg>` | 303 `/sites?msg=applied` |
 | GET `/runs/{id}` | | `run.html`, 404 if missing | |
 
 Templates and the context each receives (every template also gets `request`):
 - `base.html`:
   - Blocks: `title`, `head`, `content`.
   - Nav: 대시보드 `/`, 프로그램 `/programs`, 사이트 `/sites`.
-  - Inline `<style>` of about 65 lines: `color-scheme: light dark` with `light-dark()` tokens (dark mode follows the OS), Korean system font stack, `max-width: 960px`, `.primary`/`.danger` buttons, and `.badge` classes `ok`/`done` green, `partial`/`domain_moved` amber, `error`/`blocked`/`site_down`/`cloudflare`/`parser_broken` red, `running` blue, `env` (DEV) purple.
-  - `app/views.py` holds the single `templates` environment used by `main.py` and `doctor.py`: the `LABEL` dict (Korean status labels; `_macros.html` `badge(s)` keeps the raw value as class and `title`), the `dt`/`ago`/`dur` filters, and `go()`.
-  - No external assets.
+  - Styles live in `app/static/app.css` (mounted at `/static`, linked as `app.css?v={{ CSS_V }}`): tokens on `:root`, redefined under `prefers-color-scheme: dark` (dark mode follows the OS), one 720px breakpoint. Tokens, components and screen layouts are specified in `_workspace/design-spec.md`.
+  - Font: Pretendard Variable from jsDelivr (SRI), falling back to the system Korean fonts.
+  - `app/views.py` holds the single `templates` environment used by `main.py` and `doctor.py`: `LABEL` (Korean status labels; `_macros.html` `badge(s)` keeps the raw value as class and `title`), `FLASH` (`?msg=` texts for the `flash()` macro), the `dt`/`ago`/`dur`/`logmark` filters, and `go(path, error, msg)`.
 - `index.html`: `next_run_at`, `running`, `interval_min`, `msg`, `runs = list_runs(10)`, `downloads = list_downloads(20)`. Interval form uses `<input type=number min=1 max=1440 required>`.
 - `programs.html`: `programs`, `error`.
-- `sites.html`: `sites`, `reports = latest_doctor_report_per_site()`, `doctor_model`, `error`. Each row has:
-  - a toggle form
+- `sites.html`: `sites`, `reports = latest_doctor_report_per_site()`, `stale_before`, `interval_min`, `doctor_model`, `error`, `msg`. One card per site with:
+  - a toggle switch form
+  - last success (stale: warning badge and card band) and the latest verdict badge linking to `/doctor/{id}`
   - an edit form inside `<details>` (url input plus a boards `<textarea>`)
-  - a [진단] form POSTing to `/sites/{id}/doctor` with no model field (the route falls back to `doctor_model`)
-  - the latest verdict badge linking to `/doctor/{id}`
+  - a [진단] form POSTing to `/sites/{id}/doctor` with no model field (the route falls back to `doctor_model`); primary only on a stale card, disabled while that site's report is running
 
-  Above the table, one doctor-model default form (POST `/settings/doctor-model`).
-- `run.html`: `run`, with the log in `<pre>`.
+  The page head holds the doctor-model default form (POST `/settings/doctor-model`).
+- `run.html`: `run`, with the log in `<pre class="log">` through `logmark`.
+- `error.html`: `code`, `message`; a centered card with [대시보드로] and a same-origin Referer [뒤로].
 - `doctor.html`: see section 5.
 
 ## 7. Tests
