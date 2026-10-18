@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "_macros.html" import badge %}
 {% block title %}Doctor · {{ report.site_name }}{% endblock %}
 {% block head %}<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>{% endblock %}
 {% block content %}
 <h1>Doctor: {{ report.site_name }}</h1>
 <p>
-  <span class="badge {{ report.verdict or report.status }}">{{ report.verdict or report.status }}</span>
-  <span class="muted">model {{ report.model }} · 비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }} · 시작 {{ report.started }}</span>
+  {{ badge(report.verdict or report.status) }}
+  <span class="muted">model {{ report.model }} · 비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }} · 시작 {{ report.started|dt }}</span>
 </p>
 {% if site %}<p class="muted">현재 설정: {{ site.url }} {{ site.boards|join(" ") }}</p>{% endif %}
 

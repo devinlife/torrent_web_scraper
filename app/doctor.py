@@ -8,7 +8,6 @@ import socket
 import ssl
 import time
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ResultError, ResultMessage, TextBlock,
@@ -16,13 +15,11 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ResultError,
                               query, tool)
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
-from app import config, crawler, db
+from app import crawler, db
+from app.views import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.globals["APP_ENV"] = config.APP_ENV
 LOCK = asyncio.Lock()
 NAMES = ("dns_tls_check", "browse", "run_parser", "probe_domains")
 _tasks: set[asyncio.Task] = set()  # ponytail: in-memory only; a restart marks running reports 'error' (db.connect)

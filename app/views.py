@@ -1,0 +1,55 @@
+"""The one Jinja environment both main.py and doctor.py render with: globals, filters, redirect helper."""
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import quote
+
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
+
+from app import config
+
+LABEL = {"ok": "정상", "partial": "일부 실패", "error": "실패", "running": "실행 중", "done": "완료",
+         "domain_moved": "도메인 이전", "blocked": "차단", "site_down": "사이트 다운",
+         "cloudflare": "CF 인증 필요", "parser_broken": "파서 고장"}
+
+
+def _d(v) -> datetime | None:
+    return datetime.fromisoformat(v) if isinstance(v, str) else v
+
+
+def dt(v, now: datetime | None = None) -> str:
+    if not (d := _d(v)):
+        return "-"
+    now = now or datetime.now()
+    fmt = "%H:%M" if d.date() == now.date() else "%m-%d %H:%M" if d.year == now.year else "%Y-%m-%d %H:%M"
+    iso = escape(d.isoformat(timespec="seconds"))
+    return Markup(f'<time datetime="{iso}" title="{iso}">{d:{fmt}}</time>')
+
+
+def ago(v, now: datetime | None = None) -> str:
+    if not (d := _d(v)):
+        return "-"
+    s = int(((now or datetime.now()) - d).total_seconds())
+    n, tail = abs(s), "전" if s >= 0 else "후"
+    if n < 60:
+        return "방금"
+    for unit, size in (("일", 86400), ("시간", 3600), ("분", 60)):
+        if n >= size:
+            return f"{n // size}{unit} {tail}"
+
+
+def dur(start, end) -> str:
+    if not end:
+        return "실행 중"
+    m, s = divmod(int((_d(end) - _d(start)).total_seconds()), 60)
+    return f"{m}분 {s}초" if m else f"{s}초"
+
+
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL)
+templates.env.filters.update(dt=dt, ago=ago, dur=dur)
+
+
+def go(path: str, error: str | None = None) -> RedirectResponse:
+    return RedirectResponse(path + (f"?error={quote(error)}" if error else ""), status_code=303)

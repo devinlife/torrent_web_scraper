@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import badge %}
 {% block title %}사이트{% endblock %}
 {% block content %}
 <h1>사이트</h1>
@@ -10,7 +11,7 @@
     </select></label>
   <button>적용</button>
 </form>
-<table>
+<div class="table"><table>
   <tr><th>사이트</th><th>상태</th><th>최근 성공</th><th>doctor</th></tr>
   {% for s in sites %}{% set r = reports.get(s.id) %}
   <tr class="{{ '' if s.enabled else 'off' }}">
@@ -31,9 +32,9 @@
         <button>{{ "끄기" if s.enabled else "켜기" }}</button>
       </form>
     </td>
-    <td>{{ s.last_ok_at or "-" }}</td>
+    <td>{{ s.last_ok_at|dt }}</td>
     <td>
-      {% if r %}<a href="/doctor/{{ r.id }}"><span class="badge {{ r.verdict or r.status }}">{{ r.verdict or r.status }}</span></a>{% endif %}
+      {% if r %}<a href="/doctor/{{ r.id }}">{{ badge(r.verdict or r.status) }}</a>{% endif %}
       <form class="inline" method="post" action="/sites/{{ s.id }}/doctor">
         <select name="model">{% for m in ["sonnet", "opus"] %}
           <option value="{{ m }}" {{ "selected" if m == doctor_model }}>{{ m }}</option>{% endfor %}
@@ -43,5 +44,5 @@
     </td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% endblock %}

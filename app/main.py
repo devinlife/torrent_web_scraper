@@ -2,16 +2,14 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
-from urllib.parse import quote
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app import config, db, doctor
 from app.browser import Browser
 from app.scheduler import Scheduler
+from app.views import go, templates
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,12 +34,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(doctor.router)
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.globals["APP_ENV"] = config.APP_ENV
-
-
-def go(path: str, error: str | None = None) -> RedirectResponse:
-    return RedirectResponse(path + (f"?error={quote(error)}" if error else ""), status_code=303)
 
 
 def page(request: Request, name: str, **ctx):
