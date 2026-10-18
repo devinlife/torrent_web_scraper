@@ -1,32 +1,51 @@
 {% extends "base.html" %}
+{% from "_macros.html" import flash %}
 {% block title %}프로그램{% endblock %}
 {% block content %}
-<h1>프로그램</h1>
-{% if error %}<p class="flash">{{ error }}</p>{% endif %}
-<form class="row" method="post" action="/programs">
-  <input name="name" placeholder="프로그램 이름" required>
-  <select name="resolution">
-    <option value="any">any</option><option value="720p">720p</option><option value="1080p">1080p</option>
-  </select>
-  <button>추가</button>
-</form>
-<table>
-  <tr><th>#</th><th>이름</th><th>해상도</th><th>상태</th><th></th></tr>
-  {% for p in programs %}
-  <tr class="{{ '' if p.enabled else 'off' }}">
-    <td>{{ p.id }}</td><td>{{ p.name }}</td><td>{{ p.resolution }}</td>
-    <td>
-      <form class="inline" method="post" action="/programs/{{ p.id }}/enabled">
+{% set n_on = programs|selectattr("enabled")|list|length %}
+<div class="page-head">
+  <div><h1>프로그램</h1><p class="sub">켜짐 {{ n_on }} · 전체 {{ programs|length }} · 위에 있을수록 먼저 매칭됩니다</p></div>
+</div>
+{{ flash(error=error, msg=msg) }}
+
+<section class="card">
+  <header class="card-head"><h2>새 프로그램</h2></header>
+  <form class="card-body" method="post" action="/programs">
+    <div class="form-row">
+      <label class="field grow"><span>이름</span><input class="input" name="name" placeholder="예: 놀면 뭐하니" required></label>
+      <fieldset class="field"><legend>해상도</legend><div class="checks">
+        {% for r in RESOLUTIONS %}<label><input type="checkbox" name="resolution" value="{{ r }}"> {{ r }}</label>{% endfor %}
+      </div></fieldset>
+      <button class="btn btn-primary"><span aria-hidden="true">+</span> 추가</button>
+    </div>
+    <p class="hint">제목에 이름의 모든 단어가 들어 있고 해상도가 맞으면 받습니다. 해상도를 고르지 않으면 무관입니다. 여러 개 고르면 그중 하나만 맞아도 받습니다.</p>
+  </form>
+</section>
+
+<section class="card section">
+  {% if programs %}<div class="table-wrap"><table class="table">
+    <thead><tr><th class="num hide-sm">순서</th><th class="wide grow">이름</th><th>해상도</th><th>켜기</th><th class="end"><span class="sr-only">삭제</span></th></tr></thead>
+    <tbody>{% for p in programs %}{% set sel = p.resolution.split(",") %}
+    <tr{% if not p.enabled %} class="off"{% endif %}>
+      <td class="num hide-sm">{{ loop.index }}</td>
+      <td>{% if p.enabled %}<strong>{{ p.name }}</strong>{% else %}{{ p.name }}{% endif %}</td>
+      <td><details class="res-edit">
+        <summary class="btn btn-ghost btn-sm">{{ "무관" if p.resolution == "any" else sel|join(" · ") }}<span class="sr-only">, {{ p.name }} 해상도 수정</span> <span aria-hidden="true">▾</span></summary>
+        <form method="post" action="/programs/{{ p.id }}/resolution"><div class="checks">
+          {% for r in RESOLUTIONS %}<label><input type="checkbox" name="resolution" value="{{ r }}"{{ " checked" if r in sel }}> {{ r }}</label>{% endfor %}
+        </div><button class="btn btn-secondary btn-sm">저장</button></form>
+      </details></td>
+      <td><form class="switch-wrap" method="post" action="/programs/{{ p.id }}/enabled">
         <input type="hidden" name="enabled" value="{{ 0 if p.enabled else 1 }}">
-        <button>{{ "끄기" if p.enabled else "켜기" }}</button>
-      </form>
-      {{ "켜짐" if p.enabled else "꺼짐" }}
-    </td>
-    <td>
-      <form class="inline" method="post" action="/programs/{{ p.id }}/delete"><button>삭제</button></form>
-    </td>
-  </tr>
-  {% endfor %}
-</table>
-<p class="muted">매칭: 이름의 모든 단어가 제목에 포함되고 해상도가 맞으면(any는 전부) 다운로드합니다.</p>
+        <button class="switch" role="switch" aria-checked="{{ 'true' if p.enabled else 'false' }}" aria-label="{{ p.name }} 사용"></button>
+        <span aria-hidden="true">{{ "켜짐" if p.enabled else "꺼짐" }}</span>
+      </form></td>
+      <td class="end"><form class="inline" method="post" action="/programs/{{ p.id }}/delete"
+            onsubmit='return confirm({{ ("「" ~ p.name ~ "」 삭제할까요? 다운로드 기록은 남습니다.")|tojson }})'>
+        <button class="btn btn-danger btn-sm" aria-label="{{ p.name }} 삭제">삭제</button></form></td>
+    </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty"><p class="empty-title">아직 프로그램이 없습니다</p><p class="muted">위에서 이름을 넣고 추가하세요.</p></div>{% endif %}
+</section>
 {% endblock %}

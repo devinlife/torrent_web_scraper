@@ -1,33 +1,75 @@
 {% extends "base.html" %}
-{% block title %}Doctor · {{ report.site_name }}{% endblock %}
-{% block head %}<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>{% endblock %}
+{% from "_macros.html" import badge %}
+{% block title %}진단 · {{ report.site_name }}{% endblock %}
+{% block head %}{% if report.status == "running" %}<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>{% endif %}{% endblock %}
 {% block content %}
-<h1>Doctor: {{ report.site_name }}</h1>
-<p>
-  <span class="badge {{ report.verdict or report.status }}">{{ report.verdict or report.status }}</span>
-  <span class="muted">model {{ report.model }} · 비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }} · 시작 {{ report.started }}</span>
-</p>
-{% if site %}<p class="muted">현재 설정: {{ site.url }} {{ site.boards|join(" ") }}</p>{% endif %}
+{% set running = report.status == "running" %}
+<a class="back" href="/sites">← 사이트</a>
+<div class="page-head">
+  <div><h1>진단 · {{ report.site_name }}</h1>
+    <p class="sub">{{ report.model }} · 시작 {{ report.started|dt }} ({{ report.started|ago }}) ·
+      {% if running %}진행 중 · 상한 $1{% else %}비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }}{% endif %}</p></div>
+</div>
 
-{% if report.status == "running" %}
-<pre id="progress" hx-get="/doctor/{{ report.id }}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{{ report.progress }}</pre>
-{% else %}
-<pre id="progress">{{ report.progress }}</pre>
-{% endif %}
+{% if running %}{% set tone, title = "is-run", "진단 중입니다 · 상한 $1" %}
+{% elif data %}{% set tone, title = {"ok": "is-ok", "domain_moved": "is-warn", "transient": "is-warn"}.get(data.verdict, "is-bad"), LABEL.get(data.verdict, data.verdict) %}
+{% else %}{% set tone, title = "is-bad", "진단을 끝내지 못했습니다" %}{% endif %}
+<section class="card hero {{ tone }}" aria-label="진단 결과">
+  <p class="hero-title"><i></i>{{ title }}</p>
+  <p class="hero-text">{% if running %}보통 1–3분 걸립니다. 끝나면 이 화면이 결과로 바뀝니다.
+    {%- elif data %}{{ data.summary }}{% else %}구조화된 결과가 없습니다. 아래 진행 로그를 확인하세요.{% endif %}</p>
+</section>
 
-{% if data %}
-<h2>요약</h2>
-<p>{{ data.summary }}</p>
-<ul>{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+{% if data and site %}
 {% set fix = data.suggested_fix or {} %}
 {% if fix.url or fix.boards %}
-<h2>수정 제안</h2>
-<form method="post" action="/doctor/{{ report.id }}/apply">
-  {% if fix.url %}<p>url: <code>{{ fix.url }}</code></p>{% endif %}
-  {% if fix.boards %}<p>boards: {% for b in fix.boards %}<code>{{ b }}</code> {% endfor %}</p>{% endif %}
-  <button>적용</button>
-</form>
+{% set new_url, new_boards = fix.url or site.url, fix.boards or site.boards %}
+<section class="card">
+  <header class="card-head"><h2>수정 제안</h2></header>
+  <div class="table-wrap"><table class="table diff">
+    <thead><tr><th><span class="sr-only">항목</span></th><th>현재</th><th>제안</th></tr></thead>
+    <tbody>
+    <tr><th scope="row">URL</th><td data-label="현재">{{ site.url }}</td>
+      {% if new_url != site.url %}<td class="changed" data-label="제안">{{ new_url }}<span class="sr-only"> (변경)</span></td>{% else %}<td class="muted" data-label="제안">같음</td>{% endif %}</tr>
+    <tr><th scope="row">게시판</th><td data-label="현재">{{ site.boards|join("\n") }}</td>
+      {% if new_boards != site.boards %}<td class="changed" data-label="제안">{{ new_boards|join("\n") }}<span class="sr-only"> (변경)</span></td>{% else %}<td class="muted" data-label="제안">같음</td>{% endif %}</tr>
+    </tbody>
+  </table></div>
+  <form class="card-foot" method="post" action="/doctor/{{ report.id }}/apply"
+        onsubmit='return confirm({{ (report.site_name ~ " 설정을 제안대로 바꿀까요?")|tojson }})'>
+    <button class="btn btn-primary">이 설정으로 변경</button>
+  </form>
+</section>
+{% else %}
+<section class="card">
+  <header class="card-head"><h2>현재 설정</h2><span class="muted">수정 제안 없음</span></header>
+  <div class="table-wrap"><table class="table diff">
+    <tbody>
+    <tr><th scope="row">URL</th><td>{{ site.url }}</td></tr>
+    <tr><th scope="row">게시판</th><td>{{ site.boards|join("\n") }}</td></tr>
+    </tbody>
+  </table></div>
+</section>
 {% endif %}
 {% endif %}
-<p><a href="/sites">← 사이트</a></p>
+
+{% if data and data.evidence %}
+<section class="card">
+  <header class="card-head"><h2>근거</h2></header>
+  <ul class="card-body list">{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% set n = report.progress.strip().splitlines()|length %}
+{% if running %}
+<section class="card">
+  <header class="card-head"><h2>진행 로그</h2><span class="muted">2초마다 새로 고침</span></header>
+  <pre id="progress" class="log" hx-get="/doctor/{{ report.id }}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{{ report.progress|logmark }}</pre>
+</section>
+{% else %}
+<details class="card fold"{% if not data %} open{% endif %}>
+  <summary class="card-head"><h2>진행 로그</h2><span class="muted num">{{ n }}줄</span></summary>
+  <pre id="progress" class="log">{{ report.progress|logmark }}</pre>
+</details>
+{% endif %}
 {% endblock %}

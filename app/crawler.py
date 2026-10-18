@@ -64,7 +64,7 @@ def parse_board(html: str, base_url: str) -> list[tuple[str, str]]:
 def match(title: str, program: Mapping) -> bool:
     t = title.lower()
     res = program["resolution"]
-    return all(w in t for w in program["name"].lower().split()) and (res == "any" or res in t)
+    return all(w in t for w in program["name"].lower().split()) and (res == "any" or any(r in t for r in res.split(",")))
 
 
 def match_program(title: str, programs: Iterable[Mapping]) -> Mapping | None:

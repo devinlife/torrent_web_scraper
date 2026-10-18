@@ -1,0 +1,6 @@
+{% macro badge(s) %}<span class="badge {{ s }}" title="{{ s }}"><i></i>{{ LABEL.get(s, s) }}</span>{% endmacro %}
+{% macro flash(error=none, msg=none, n=none) %}
+{%- if error %}<div class="flash flash-bad" role="status">{{ error }}</div>{% endif %}
+{%- if msg in FLASH %}{% set kind, text = FLASH[msg] %}<div class="flash flash-{{ kind }}" role="status"><span>{{ text.format(n=n) }}</span>
+  {%- if msg == "applied" %}<form method="post" action="/run-now"><button class="btn btn-secondary btn-sm">지금 실행</button></form>{% endif %}</div>{% endif %}
+{%- endmacro %}

@@ -4,42 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% if APP_ENV == "dev" %}[dev] {% endif %}{% block title %}torrent{% endblock %} · torrent</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 0 auto; padding: 0 16px 40px;
-         color: #222; background: #fff; line-height: 1.4; }
-  nav { display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px solid #ddd; margin-bottom: 16px; }
-  nav a { font-weight: 600; }
-  a { color: #0b5cad; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  h1 { font-size: 1.4em; } h2 { font-size: 1.1em; margin-top: 28px; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; vertical-align: top; }
-  th { background: #f5f5f5; }
-  tr.off td { color: #999; }
-  form.inline { display: inline; margin: 0; }
-  form.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
-  input, select, textarea, button { font: inherit; font-size: 14px; }
-  textarea { width: 100%; box-sizing: border-box; }
-  input[type=url] { width: 100%; box-sizing: border-box; }
-  button { cursor: pointer; padding: 2px 10px; }
-  pre { background: #f7f7f7; border: 1px solid #ddd; padding: 12px; overflow-x: auto;
-        white-space: pre-wrap; font-size: 13px; }
-  .muted { color: #888; }
-  .flash { padding: 8px 12px; border-radius: 4px; background: #fdecea; color: #a12622; }
-  .flash.info { background: #eef4fb; color: #0b5cad; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
-           font-weight: 600; background: #eee; color: #444; }
-  .badge.ok, .badge.done { background: #e3f4e5; color: #1e7b34; }
-  .badge.partial, .badge.domain_moved { background: #fdf1d8; color: #8a5a00; }
-  .badge.error, .badge.blocked, .badge.site_down, .badge.cloudflare, .badge.parser_broken
-         { background: #fdecea; color: #a12622; }
-  .badge.running { background: #e3edfb; color: #1d5bb8; }
-</style>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" crossorigin="anonymous"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
+      integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0">
+<link rel="stylesheet" href="/static/app.css?v={{ CSS_V }}">
 {% block head %}{% endblock %}
 </head>
 <body>
-<nav><a href="/">대시보드</a><a href="/programs">프로그램</a><a href="/sites">사이트</a>
-{% if APP_ENV == "dev" %}<span class="badge partial" title="Transmission 추가와 사이트 URL 변경을 하지 않는다">DEV · dry-run</span>{% endif %}</nav>
+{% set p = request.url.path %}{% set cur = none if code is defined else "/sites" if p.startswith(("/sites", "/doctor")) else "/programs" if p.startswith("/programs") else "/" %}
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="/">torrent</a>
+  <nav class="nav" aria-label="주 메뉴">{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}</nav>
+  {% if APP_ENV == "dev" %}<span class="badge env">DEV</span>{% endif %}
+</div></header>
+{% if APP_ENV == "dev" %}<div class="envbar"><div class="wrap">DEV · dry-run — Transmission 추가, 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다</div></div>{% endif %}
+<main class="main wrap">
 {% block content %}{% endblock %}
+</main>
 </body>
 </html>

@@ -86,6 +86,8 @@ def test_match():
     pd = "PD 수첩.E1234.261014.720p-NEXT"
     assert c.match(pd, {"name": "pd 수첩", "resolution": "720p"})
     assert not c.match(pd, {"name": "pd 수첩", "resolution": "1080p"})
+    assert c.match(pd, {"name": "pd 수첩", "resolution": "720p,1080p"})
+    assert not c.match("PD 수첩.E1234.261014-NEXT", {"name": "pd 수첩", "resolution": "720p,1080p"})
     assert c.match("전지적 참견 시점.E421.261017.720p-NEXT", {"name": "전지적", "resolution": "any"})
     assert not c.match("놀면 뭐 하니.E348.261017.720p-NEXT", {"name": "놀면 뭐하니", "resolution": "any"})
     a, b = {"name": "놀면", "resolution": "any"}, {"name": "놀면 뭐하니", "resolution": "any"}

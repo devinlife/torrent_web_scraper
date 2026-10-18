@@ -1,6 +1,5 @@
 """Doctor: a hermetic Claude agent with 4 read-only tools that diagnoses why a site stopped working."""
 import asyncio
-import html
 import ipaddress
 import json
 import re
@@ -8,7 +7,6 @@ import socket
 import ssl
 import time
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ResultError, ResultMessage, TextBlock,
@@ -16,13 +14,11 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ResultError,
                               query, tool)
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
-from app import config, crawler, db
+from app import crawler, db
+from app.views import go, logmark, templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.globals["APP_ENV"] = config.APP_ENV
 LOCK = asyncio.Lock()
 NAMES = ("dns_tls_check", "browse", "run_parser", "probe_domains")
 _tasks: set[asyncio.Task] = set()  # ponytail: in-memory only; a restart marks running reports 'error' (db.connect)
@@ -38,13 +34,18 @@ PROCEDURE:
 4. If DNS fails, browse fails, or the page is not this board, call probe_domains.
 Stop as soon as the evidence supports one verdict.
 
-IMPORTANT FACT: Korean ISPs reset plain TLS connections that carry these sites' real SNI. A failed "tls sni=<host>" alongside a working browse is NORMAL (our Chromium uses ECH) and is NOT "blocked". Judge reachability by browse.
+IMPORTANT FACT: Korean ISPs reset plain TLS connections that carry these sites' real SNI. dns_tls_check's TLS probe cannot use ECH, so a failed "tls sni=<host>" is NORMAL and never by itself evidence of "blocked" (our Chromium uses ECH). Judge reachability by browse only.
+
+TRANSIENT RESETS: our Chromium sometimes connects without ECH for a short window (its DNS HTTPS record came late) and gets reset. browse already retries resets ~30 s apart.
+- "transient: yes" in browse = the site is reachable, not blocked. Continue with run_parser and judge as usual (ok if it works); mention the transient failure in evidence.
+- If the crawler log shows posts for this site in the last few hours (compare run start times with "now") and only browse fails, call browse once more. If it still fails, the verdict is transient.
 
 VERDICTS:
 - ok: run_parser finds posts and extracts a magnet hash.
 - domain_moved: the configured domain no longer serves the board (DNS failure, parked page, redirect elsewhere) and/or probe_domains finds a working +N domain.
-- blocked: DNS resolves but browse fails with ERR_CONNECTION_CLOSED/RESET, or lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해").
-- site_down: TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- blocked: browse lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해"), or browse fails with ERR_CONNECTION_CLOSED/RESET on every attempt AND the crawler log shows no recent success.
+- site_down: no recent crawler success and TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- transient: the site is unreachable right now (connection resets / timeouts across retries) but the crawler succeeded recently (within the last few hours). Likely a temporary ECH/DNS fallback or network blip; say in summary to re-check later. suggested_fix stays null.
 - cloudflare: browse shows a Cloudflare challenge (cloudflare_challenge: yes, often 403/503).
 - parser_broken: browse returns the real board with visible posts, but run_parser finds 0 posts or no magnet.
 If probe_domains marks a candidate "<- works", the verdict is domain_moved even when the configured domain looks blocked or down, and suggested_fix.url is that candidate.
@@ -52,7 +53,7 @@ If probe_domains marks a candidate "<- works", the verdict is domain_moved even 
 OUTPUT: summary and evidence in Korean. evidence = short factual lines quoting tool output. Put a value in suggested_fix.url or suggested_fix.boards ONLY when a tool result proves it works (e.g. probe_domains "<- works", or run_parser succeeding on that base_url); otherwise null."""
 
 SCHEMA = {"type": "object", "required": ["verdict", "summary", "evidence", "suggested_fix"], "properties": {
-    "verdict": {"type": "string", "enum": ["ok", "domain_moved", "blocked", "site_down", "cloudflare", "parser_broken"]},
+    "verdict": {"type": "string", "enum": ["ok", "domain_moved", "blocked", "site_down", "transient", "cloudflare", "parser_broken"]},
     "summary": {"type": "string"},
     "evidence": {"type": "array", "items": {"type": "string"}},
     "suggested_fix": {"type": "object", "required": ["url", "boards"], "properties": {
@@ -63,6 +64,10 @@ CF_RE = re.compile(r"cf-chl|challenge-platform|turnstile|Just a moment", re.I)
 JUNK_RE = re.compile(r"<(script|style|svg|noscript)\b.*?</\1\s*>|<!--.*?-->", re.I | re.S)
 ATTR_RE = re.compile(r'\s(?!href=|title=)[\w:-]+=("[^"]*"|\'[^\']*\'|[^\s>]+)')
 BODY_RE = re.compile(r"<body", re.I)
+# Chromium falls back to plaintext SNI for a short window when the ECH config (DNS HTTPS record) is late,
+# and the ISP resets that; space out retries so a later attempt lands after the window.
+RESETS = ("net::ERR_CONNECTION_CLOSED", "net::ERR_CONNECTION_RESET", "net::ERR_EMPTY_RESPONSE")
+RESET_WAITS = (5, 10, 15)  # seconds before each extra attempt; 30 s wall-clock max, no extra turns
 
 
 def _public_http_url(url: str) -> bool:
@@ -110,7 +115,28 @@ def _dns_tls(host: str) -> list[str]:
                 out.append(f"tls sni={sni}: ok {t.version()}")
         except OSError as e:
             out.append(f"tls sni={sni}: FAIL {type(e).__name__}: {e}"[:200])
+    if out[-2].startswith(f"tls sni={host}: FAIL"):
+        out.append("note: this stdlib TLS probe cannot use ECH; a real-SNI failure here is expected on SNI-filtered "
+                   "networks and does not mean the browser is blocked. Use browse for reachability.")
     return out
+
+
+async def _fetch_spaced(browser, url: str):
+    """browser.fetch plus spaced retries on connection resets. Each fetch takes the browser lock on its own,
+    so the crawler can use Chromium during the sleeps."""
+    attempts = []
+    for wait in (0, *RESET_WAITS):
+        if wait:
+            await asyncio.sleep(wait)
+        r = await browser.fetch(url, timeout_ms=15000, retries=1)
+        attempts.append(f"{len(attempts) + 1} " + (r.error.removeprefix("net::") if r.error else f"status {r.status}"))
+        if r.error not in RESETS:
+            break
+    lines = [f"attempts: {', '.join(attempts)}"]
+    if len(attempts) > 1:
+        lines.append("transient: yes (failed then succeeded)" if r.error is None
+                     else f"transient: no (failed all {len(attempts)} attempts over {sum(RESET_WAITS)}+ s)")
+    return r, lines
 
 
 def _text(lines: list[str]) -> dict:
@@ -126,25 +152,28 @@ def build_tools(conn, browser, site: dict) -> list:
     ro = ToolAnnotations(readOnlyHint=True)
 
     @tool("dns_tls_check", "DNS lookup, TCP connect, then TLS with the real SNI and with a fake SNI "
-          "(www.google.com). Facts only.", {"host": str}, annotations=ro)
+          "(www.google.com). The TLS probe has no ECH, so a real-SNI failure is normal in Korea; it is not reachability "
+          "evidence (browse is).", {"host": str}, annotations=ro)
     async def dns_tls_check(args):
         h = args["host"].strip()
         return _text(await asyncio.to_thread(_dns_tls, urlsplit(h if "//" in h else "//" + h).hostname or h))
 
     @tool("browse", "Open a URL in our headless Chromium (same as the crawler). Returns status, final URL, "
-          "title, Cloudflare-challenge flag and trimmed HTML.", {"url": str},
+          "title, Cloudflare-challenge flag and trimmed HTML. Connection resets are retried ~5/10/15 s apart; "
+          "'attempts' lists each try.", {"url": str},
           annotations=ToolAnnotations(readOnlyHint=True, maxResultSizeChars=20000))
     async def browse(args):
         url = args["url"].strip()
         if not _public_http_url(url):
             return {**_text(["only public http(s):// URLs"]), "is_error": True}
-        r = await browser.fetch(url, timeout_ms=15000, retries=1)
+        r, attempts = await _fetch_spaced(browser, url)
         raw = r.html[:500_000]
         title = re.search(r"<title[^>]*>(.*?)</title>", raw, re.I | re.S)
         body = await asyncio.to_thread(_trim_html, raw)
         return _text([f"status: {r.status}", f"final_url: {r.final_url[:300]}",
                       f"title: {' '.join(title[1].split())[:200] if title else '-'}",
                       f"cloudflare_challenge: {'yes' if CF_RE.search(raw) else 'no'}", f"error: {r.error or '-'}",
+                      *attempts,
                       f"html ({min(len(body), 15000)} of {len(body)} chars, from <body, script/style/svg/noscript/"
                       f"comments and all attributes but href/title removed, whitespace collapsed):", body[:15000]])
 
@@ -192,9 +221,12 @@ def build_tools(conn, browser, site: dict) -> list:
 
 def _user_prompt(conn, site: dict) -> str:
     tag = f"site {site['name']}:"
-    lines = [ln for run in reversed(db.list_runs(conn, 3)) for ln in run["log"].splitlines() if tag in ln][-30:]
+    lines = []  # log lines carry only HH:MM:SS, so each run's start date goes in front
+    for run in reversed(db.list_runs(conn, 3)):
+        if hits := [ln for ln in run["log"].splitlines() if tag in ln]:
+            lines += [f"run started {run['started']}:", *hits[-10:]]
     return (f"Site: {site['name']}\nbase_url: {site['url']}\nboards: {json.dumps(site['boards'])}\n"
-            f"last_ok_at: {site['last_ok_at'] or 'never'}\nRecent crawler log lines for this site:\n"
+            f"now: {db.now()}\nlast_ok_at: {site['last_ok_at'] or 'never'}\nRecent crawler log lines for this site:\n"
             + ("\n".join(lines) or "(none)"))
 
 
@@ -249,10 +281,11 @@ async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> N
 
 # routes: async so every db call stays on the event-loop thread
 @router.post("/sites/{id}/doctor")
-async def start_doctor(request: Request, id: int, model: str = Form(...)):
+async def start_doctor(request: Request, id: int, model: str | None = Form(None)):
     conn = request.app.state.db
+    model = model or db.get_setting(conn, "doctor_model", "sonnet")
     if model not in db.MODELS:
-        raise HTTPException(400, "model must be sonnet or opus")
+        raise HTTPException(400, "모델은 sonnet 또는 opus만 됩니다.")
     if not (site := db.get_site(conn, id)):
         raise HTTPException(404)
     rid = db.create_doctor_report(conn, id, model)
@@ -279,24 +312,24 @@ async def show_doctor(request: Request, id: int):
 @router.get("/doctor/{id}/progress")
 async def doctor_progress(request: Request, id: int):
     r = _report(request, id)
-    body = html.escape(r["progress"])
+    body = logmark(r["progress"])  # same markup as doctor.html's <pre id="progress" class="log">
     if r["status"] == "running":
-        return HTMLResponse(f'<pre id="progress" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" '
+        return HTMLResponse(f'<pre id="progress" class="log" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" '
                             f'hx-swap="outerHTML">{body}</pre>')
-    return HTMLResponse(f'<pre id="progress">{body}</pre>', headers={"HX-Refresh": "true"})
+    return HTMLResponse(f'<pre id="progress" class="log">{body}</pre>', headers={"HX-Refresh": "true"})
 
 
 @router.post("/doctor/{id}/apply")
 async def apply_fix(request: Request, id: int):
     r = _report(request, id)
     if r["status"] != "done" or not r["report_json"]:
-        raise HTTPException(400, "report is not done")
+        return go("/sites", "완료된 진단 리포트가 아닙니다")
     fix = json.loads(r["report_json"]).get("suggested_fix") or {}
     site = db.get_site(request.app.state.db, r["site_id"])  # null parts keep the current value
     try:
         url, boards = db.clean_site_fields(fix.get("url") or site["url"],
                                            site["boards"] if fix.get("boards") is None else fix["boards"])
     except ValueError as e:
-        raise HTTPException(400, str(e)) from None
+        return go("/sites", str(e))
     db.update_site(request.app.state.db, r["site_id"], url=url, boards=boards)
-    return RedirectResponse("/sites", status_code=303)
+    return RedirectResponse("/sites?msg=applied", status_code=303)

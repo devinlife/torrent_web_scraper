@@ -24,6 +24,8 @@ TRANSMISSION_PASSWORD: str = os.environ.get("TRANSMISSION_PASSWORD", "")
 
 Environments. Both run in Docker on the Mac from the same image build and share `.env`; `server.sh <dev|prod> <cmd>` wraps `docker compose -f <file>`.
 
+Image. One multi-stage `Dockerfile`. The build stage (`python:3.12.15-slim-bookworm` + uv 0.8.22) runs `uv sync --frozen --no-dev`. The runtime stage uses the same base, so the venv's python symlink resolves. It copies only `/app/.venv` and `app/`, then runs `playwright install --with-deps chromium` with `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`. Playwright 1.48 ships only the full Chromium, with no separate headless shell, which `--headless=new` needs for ECH. Firefox, WebKit and uv are not in the image. The slim base already has `tzdata`, and `TZ=Asia/Seoul` applies. The image is about 1.5GB (it was 2.9GB on the `mcr.microsoft.com/playwright/python` base). `.dockerignore` keeps `.git`, `.venv`, `data`, `_workspace`, `tests` and `.env` out of the build context.
+
 | | dev | prod |
 |---|---|---|
 | compose file / project | `compose.dev.yaml` / `torrent_web_scraper-dev` | `compose.yaml` / `torrent_web_scraper` |
@@ -32,7 +34,7 @@ Environments. Both run in Docker on the Mac from the same image build and share 
 | data volume | `./data/dev:/data` | `./data/prod:/data` |
 | code | `./app:/app/app` bind mount, `uvicorn --reload --reload-dir app` | baked into the image |
 | restart | none | `unless-stopped` |
-| UI | `DEV · dry-run` badge in the nav, `[dev]` title prefix (`APP_ENV` is a Jinja global in both template environments) | — |
+| UI | `DEV · dry-run` badge in the nav, `[dev]` title prefix (`APP_ENV` is a global in the shared Jinja environment, `app/views.py`) | — |
 
 Ports come from `.env` via compose interpolation; the container always listens on 8080. `server.sh` prints the URL from `docker compose port scraper 8080`. Commands: `up` (`up -d --build`), `down`, `restart`, `reset` (down, delete `app.db` and its WAL/SHM, up; prod asks to type `prod`), `logs`, `ps`, `dry-run` (`run --rm scraper python -m app.scheduler --dry-run`).
 
@@ -99,7 +101,8 @@ class FetchResult:
     def ok(self) -> bool: return self.error is None and 200 <= self.status < 400
 
 class Browser:
-    def __init__(self, settle_ms: int = 2000) -> None
+    def __init__(self, settle_ms: int = 2000, gap_s: tuple[float, float] = (2.0, 5.0),
+                 block_assets: bool = True) -> None
     async def start(self) -> None       # async_playwright().start(); launch; new_context
     async def stop(self) -> None        # close context/browser/playwright; idempotent
     async def fetch(self, url: str, *, timeout_ms: int = 30000, retries: int = 2) -> FetchResult
@@ -110,9 +113,11 @@ Launch, exactly as in the research:
 self._browser = await self._pw.chromium.launch(headless=False, args=["--headless=new", "--no-sandbox"])
 self._ctx = await self._browser.new_context(locale="ko-KR")
 ```
+With `block_assets` (default), `start()` also adds `ctx.route("**/*", ...)` that aborts `image`, `media` and `font` requests and continues the rest. Stylesheets and scripts stay loaded (JS-rendered boards, Cloudflare checks). Because it lives in `start()`, crash recovery re-applies it.
 
 `fetch` does the following:
 - The whole call, including retries, runs under `async with self._lock`, a single `asyncio.Lock`.
+- Pacing, first thing inside the lock: per URL host it remembers when the last fetch finished; if that was less than `random.uniform(*gap_s)` seconds ago it sleeps the remainder. Different hosts (including domain-probe candidates) don't wait. Tests pass `gap_s=(0, 0)` or fake the clock.
 - Inside the lock, if `self._ctx is None`, `self._browser is None` or `not self._browser.is_connected()`, it closes the dead browser (keeping the playwright driver) and calls `start()` again. `start()` sets `self._ctx = None` first, so a launch that fails halfway is retried on the next fetch. A relaunch failure comes back as `FetchResult(0, url, "", err)`, never raised. This is crash recovery and also allows lazy start.
 - Each attempt:
   1. `page = await ctx.new_page()`
@@ -147,7 +152,7 @@ class Scheduler:
     def start(self) -> None                   # self._task = asyncio.create_task(self._loop())
     async def stop(self) -> None              # cancel + await, suppress CancelledError
     def trigger_now(self) -> bool             # False if a run is in progress (ignored); else sets flag + wakes
-    def set_interval(self, minutes: int) -> None  # 1..1440 else ValueError; db.set_setting; wake
+    def set_interval(self, minutes: int) -> None  # 5..1440 else ValueError; db.set_setting; wake
     @property
     def running(self) -> bool                 # self._lock.locked()
     next_run_at: datetime | None              # recomputed each loop tick
@@ -354,7 +359,7 @@ Every site line contains `site {name}:`. Doctor greps on that.
 ### `Scheduler._loop`
 ```
 while True:
-  interval = int(db.get_setting(conn, "interval_min", "60"))
+  interval = max(5, int(db.get_setting(conn, "interval_min", "60")))  # clamp legacy values < 5
   last = db.list_runs(conn, 1)
   self.next_run_at = fromisoformat(last[0]["started"]) + timedelta(minutes=interval) if last else datetime.now()
   if self._now or datetime.now() >= self.next_run_at:
@@ -435,7 +440,8 @@ VERDICTS:
 - ok: run_parser finds posts and extracts a magnet hash.
 - domain_moved: the configured domain no longer serves the board (DNS failure, parked page, redirect elsewhere) and/or probe_domains finds a working +N domain.
 - blocked: DNS resolves but browse fails with ERR_CONNECTION_CLOSED/RESET, or lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해").
-- site_down: TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- site_down: no recent crawler success and TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- transient: the site is unreachable right now (connection resets / timeouts across retries) but the crawler succeeded recently (within the last few hours). Likely a temporary ECH/DNS fallback or network blip; say in summary to re-check later. suggested_fix stays null.
 - cloudflare: browse shows a Cloudflare challenge (cloudflare_challenge: yes, often 403/503).
 - parser_broken: browse returns the real board with visible posts, but run_parser finds 0 posts or no magnet.
 If probe_domains marks a candidate "<- works", the verdict is domain_moved even when the configured domain looks blocked or down, and suggested_fix.url is that candidate.
@@ -447,7 +453,7 @@ User prompt: `Site: {name}\nbase_url: {url}\nboards: {boards json}\nlast_ok_at: 
 ### Schema
 ```python
 SCHEMA = {"type": "object", "required": ["verdict", "summary", "evidence", "suggested_fix"], "properties": {
-  "verdict": {"type": "string", "enum": ["ok","domain_moved","blocked","site_down","cloudflare","parser_broken"]},
+  "verdict": {"type": "string", "enum": ["ok","domain_moved","blocked","site_down","transient","cloudflare","parser_broken"]},
   "summary": {"type": "string"},
   "evidence": {"type": "array", "items": {"type": "string"}},
   "suggested_fix": {"type": "object", "required": ["url", "boards"], "properties": {
@@ -487,20 +493,21 @@ Progress lines, each prefixed `HH:MM:SS`: `start: {name} {url} model={model}`, `
 
 Background tasks are kept in a module-level set: `_tasks: set[asyncio.Task]`, with `task.add_done_callback(_tasks.discard)`. Mark it `# ponytail:`.
 
-### Routes (`router = APIRouter()`, own `Jinja2Templates(directory=Path(__file__).parent / "templates")`)
+### Routes (`router = APIRouter()`, renders with the shared `app.views.templates`)
 
 | method path | form | action | response |
 |---|---|---|---|
 | POST `/sites/{id}/doctor` | `model` ∈ `db.MODELS`, else 400 | 404 if no site. Only `rid = create_doctor_report` and spawn `run_doctor` as a task in `_tasks`; the busy check is inside `run_doctor`. | 303 `/doctor/{rid}` |
 | GET `/doctor/{id}` | | 404 if no report. Renders `doctor.html` with `report`, `site`, `data` (`json.loads(report_json)` or None). | 200 |
-| GET `/doctor/{id}/progress` | | Returns `<pre id="progress" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{escaped progress}</pre>`, built inline with `html.escape`. When status ≠ running, the same `<pre>` comes back without `hx-*` attributes plus the header `HX-Refresh: true`, so the page reloads with the full report. | 200 |
-| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 400. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 400. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites` |
+| GET `/doctor/{id}/progress` | | Returns `<pre id="progress" class="log" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{logmark(progress)}</pre>`, built inline (same element as in `doctor.html`). When status ≠ running, the same `<pre>` comes back without `hx-*` attributes plus the header `HX-Refresh: true`, so the page reloads with the full report. | 200 |
+| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 303 `/sites?error=<msg>`. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 303 `/sites?error=<msg>`. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites?msg=applied` |
 
-`doctor.html` extends `base.html`. It loads `<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-…" crossorigin="anonymous">` (SRI) in `{% block head %}` and shows:
-- the verdict badge, model, cost (`%.3f`), and started time
-- the `<pre id=progress>`, polling only while running
-- the summary and the evidence `<ul>`
-- the suggested fix with an [적용] form (POST apply), shown only if `url` or `boards` is non-null
+`doctor.html` extends `base.html`. While running it loads `<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-…" crossorigin="anonymous">` (SRI) in `{% block head %}`. It shows (layout: `_workspace/design-spec.md` §5.6):
+- model, started time, and cost (`%.3f`) or "진행 중 · 상한 $1"
+- a verdict hero card with the summary
+- the suggested fix as a 현재/제안 table with [이 설정으로 변경] (POST apply), only if `url` or `boards` is non-null; otherwise the current settings
+- the evidence list
+- the `<pre id="progress" class="log">`: polling inside an open card while running, inside a collapsed `<details>` when finished (open on `error`)
 
 ## 6. main.py and templates
 
@@ -520,33 +527,35 @@ await sched.stop(); await browser.stop(); conn.close()
 |---|---|---|---|
 | GET `/` | | `index.html` | |
 | POST `/run-now` | | `ok = sched.trigger_now()` | 303 `/` (`/?msg=already-running` if not ok) |
-| POST `/settings/interval` | `minutes: int = Form(ge=1, le=1440)` | `sched.set_interval` | 303 `/` |
-| POST `/settings/doctor-model` | `model` ∈ `db.MODELS`, else 400 | `set_setting("doctor_model")` | 303 `/sites` |
-| GET `/programs` | `?error=` | `programs.html` | |
-| POST `/programs` | `name`, `resolution` ∈ {720p, 1080p, any} | `add_program`; ValueError gives `?error=<msg>` | 303 `/programs` |
+| POST `/settings/interval` | `minutes: int = Form(ge=5, le=1440)` | `sched.set_interval` | 303 `/?msg=interval` |
+| POST `/settings/doctor-model` | `model` ∈ `db.MODELS`, else 400 | `set_setting("doctor_model")` | 303 `/sites?msg=model` |
+| GET `/programs` | `?error=`, `?msg=` | `programs.html` | |
+| POST `/programs` | `name`, `resolution` ∈ {720p, 1080p, any} | `add_program`; ValueError gives `?error=<msg>` | 303 `/programs?msg=added` |
 | POST `/programs/{id}/enabled` | `enabled` ("1"/"0") | `set_program_enabled` | 303 `/programs` |
 | POST `/programs/{id}/delete` | | `delete_program` | 303 `/programs` |
 | GET `/sites` | | `sites.html` | |
 | POST `/sites/{id}/enabled` | `enabled` ("1"/"0") | `update_site(enabled=)` | 303 `/sites` |
-| POST `/sites/{id}` | `url`, `boards` (one per line) | `db.clean_site_fields(url, boards.splitlines())`, which also rejects empty boards; `ValueError` gives `?error=<msg>` | 303 `/sites` |
+| POST `/sites/{id}` | `url`, `boards` (one per line) | `db.clean_site_fields(url, boards.splitlines())`, which also rejects empty boards; `ValueError` gives `?error=<msg>` | 303 `/sites?msg=applied` |
 | GET `/runs/{id}` | | `run.html`, 404 if missing | |
 
 Templates and the context each receives (every template also gets `request`):
 - `base.html`:
   - Blocks: `title`, `head`, `content`.
   - Nav: 대시보드 `/`, 프로그램 `/programs`, 사이트 `/sites`.
-  - Inline `<style>` of about 40 lines: `system-ui` font, `max-width: 960px`, table borders and padding, inline forms, and `.badge` classes `ok`/`done` green, `partial` amber, `error`/`blocked`/`site_down`/`cloudflare`/`parser_broken` red, `running` blue, `domain_moved` amber.
-  - No external assets.
-- `index.html`: `next_run_at`, `running`, `interval_min`, `msg`, `runs = list_runs(10)`, `downloads = list_downloads(20)`. Interval form uses `<input type=number min=1 max=1440 required>`.
+  - Styles live in `app/static/app.css` (mounted at `/static`, linked as `app.css?v={{ CSS_V }}`): tokens on `:root`, redefined under `prefers-color-scheme: dark` (dark mode follows the OS), one 720px breakpoint. Tokens, components and screen layouts are specified in `_workspace/design-spec.md`.
+  - Font: Pretendard Variable from jsDelivr (SRI), falling back to the system Korean fonts.
+  - `app/views.py` holds the single `templates` environment used by `main.py` and `doctor.py`: `LABEL` (Korean status labels; `_macros.html` `badge(s)` keeps the raw value as class and `title`), `FLASH` (`?msg=` texts for the `flash()` macro), the `dt`/`ago`/`dur`/`logmark` filters, and `go(path, error, msg)`.
+- `index.html`: `next_run_at`, `running`, `interval_min`, `msg`, `runs = list_runs(10)`, `downloads = list_downloads(20)`. Interval form uses `<input type=number min=5 max=1440 required>`.
 - `programs.html`: `programs`, `error`.
-- `sites.html`: `sites`, `reports = latest_doctor_report_per_site()`, `doctor_model`, `error`. Each row has:
-  - a toggle form
+- `sites.html`: `sites`, `reports = latest_doctor_report_per_site()`, `stale_before`, `interval_min`, `doctor_model`, `error`, `msg`. One card per site with:
+  - a toggle switch form
+  - last success (stale: warning badge and card band) and the latest verdict badge linking to `/doctor/{id}`
   - an edit form inside `<details>` (url input plus a boards `<textarea>`)
-  - a doctor form (a `<select name=model>` preselected to `doctor_model`, POSTing to `/sites/{id}/doctor`)
-  - the latest verdict badge linking to `/doctor/{id}`
+  - a [진단] form POSTing to `/sites/{id}/doctor` with no model field (the route falls back to `doctor_model`); primary only on a stale card, disabled while that site's report is running
 
-  Above the table, one doctor-model default form (POST `/settings/doctor-model`).
-- `run.html`: `run`, with the log in `<pre>`.
+  The page head holds the doctor-model default form (POST `/settings/doctor-model`).
+- `run.html`: `run`, with the log in `<pre class="log">` through `logmark`.
+- `error.html`: `code`, `message`; a centered card with [대시보드로] and a same-origin Referer [뒤로].
 - `doctor.html`: see section 5.
 
 ## 7. Tests
@@ -619,7 +628,7 @@ That is 22 test functions in 4 files; `uv run pytest -q` reports 56 passed with 
 | transmission | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
 | transmission | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:<hash>'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. |
 | transmission | In the prod container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
-| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 2 min apart. Set it back to 60. Port 8081 does the same on dev. |
+| schedule | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=5 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow 5 min apart. Set it back to 60. Port 8081 does the same on dev. |
 | web | Browser at http://127.0.0.1:8080 (prod) | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. |
 | doctor | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. |
 | doctor | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. |

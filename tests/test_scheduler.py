@@ -1,9 +1,12 @@
 import asyncio
+from datetime import datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from app import config, db
 from app.browser import FetchResult
-from app.scheduler import run_once
+from app.scheduler import Scheduler, run_once
 
 FIX = Path(__file__).parent / "fixtures"
 HASH = "4e4d86cbee91db107def6d3fd24271afd28130e2"
@@ -108,3 +111,23 @@ def test_failed_later_board_is_partial(tmp_path):
     run = db.get_run(conn, asyncio.run(run_once(conn, FakeBrowser(), add_magnet=lambda m: "added")))
     assert run["status"] == "partial", run["log"]
     assert db.get_site(conn, 1)["last_ok_at"]
+
+
+def test_interval_min_5(tmp_path):
+    conn = db.connect(tmp_path / "app.db")
+    s = Scheduler(conn, None)
+    with pytest.raises(ValueError):
+        s.set_interval(4)
+    s.set_interval(5)
+    assert db.get_setting(conn, "interval_min") == "5"
+
+    db.set_setting(conn, "interval_min", "1")  # legacy value is read as 5
+    rid = db.create_run(conn)
+
+    async def go():
+        s.start()
+        await asyncio.sleep(0.05)
+        await s.stop()
+    asyncio.run(go())
+    started = datetime.fromisoformat(db.get_run(conn, rid)["started"])
+    assert s.next_run_at == started + timedelta(minutes=5)

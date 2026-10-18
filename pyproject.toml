@@ -7,7 +7,7 @@ dependencies = [
     "claude-agent-sdk",
     "fastapi",
     "jinja2",
-    "playwright==1.48.0", # must match the browsers in the Docker base image
+    "playwright==1.48.0", # Dockerfile installs the Chromium build this version expects
     "python-multipart",
     "uvicorn",
 ]
