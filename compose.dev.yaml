@@ -1,4 +1,4 @@
-# dev: http://127.0.0.1:8081, data in ./data/dev, every crawl is a dry run, ./app reloads on save.
+# dev: http://127.0.0.1:${DEV_PORT} (default 8081), data in ./data/dev, every crawl is a dry run, ./app reloads on save.
 # Control with ./server.sh dev ...
 name: torrent_web_scraper-dev
 services:
@@ -6,7 +6,7 @@ services:
     build: .
     image: torrent-web-scraper:dev
     ports:
-      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:${DEV_PORT:-8081}:8080"
     volumes:
       - ./data/dev:/data
       - ./app:/app/app

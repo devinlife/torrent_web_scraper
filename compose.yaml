@@ -1,11 +1,11 @@
-# prod: http://127.0.0.1:8080, data in ./data/prod, adds magnets to Transmission. Control with ./server.sh prod ...
+# prod: http://127.0.0.1:${PROD_PORT} (default 8080), data in ./data/prod, adds magnets to Transmission. Control with ./server.sh prod ...
 name: torrent_web_scraper
 services:
   scraper:
     build: .
     image: torrent-web-scraper
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${PROD_PORT:-8080}:8080"
     volumes:
       - ./data/prod:/data
     env_file: .env

@@ -15,26 +15,30 @@ Usage: ./server.sh <dev|prod> <command>
   ps        컨테이너 상태를 본다.
   dry-run   크롤링을 한 번 실행하고 로그를 출력한다. Transmission 추가와 URL 변경은 하지 않는다.
 
-  dev   http://127.0.0.1:8081  ./data/dev   모든 실행이 dry-run, ./app 저장 시 자동 재시작
-  prod  http://127.0.0.1:8080  ./data/prod  Transmission에 실제로 추가
+  dev   127.0.0.1:$DEV_PORT (기본 8081)   ./data/dev   모든 실행이 dry-run, ./app 저장 시 자동 재시작
+  prod  127.0.0.1:$PROD_PORT (기본 8080)  ./data/prod  Transmission에 실제로 추가
+
+  포트는 .env의 DEV_PORT, PROD_PORT로 정한다.
 USAGE
 }
 
 case "${1-}" in
-  dev) file=compose.dev.yaml url=http://127.0.0.1:8081 ;;
-  prod) file=compose.yaml url=http://127.0.0.1:8080 ;;
+  dev) file=compose.dev.yaml ;;
+  prod) file=compose.yaml ;;
   -h | --help) usage; exit 0 ;;
   *) usage >&2; exit 1 ;;
 esac
 env=$1
 data=data/$env
 dc() { docker compose -f "$file" "$@"; }
+# 실제로 열린 포트를 compose에 묻는다(.env의 *_PORT 반영).
+url() { echo "http://$(dc port scraper 8080)"; }
 
 case "${2-}" in
   up)
     mkdir -p "$data"
     dc up -d --build
-    echo "$env: $url"
+    echo "$env: $(url)"
     ;;
   down) dc down ;;
   restart) dc restart ;;
@@ -48,7 +52,7 @@ case "${2-}" in
     rm -f "$data"/app.db "$data"/app.db-wal "$data"/app.db-shm
     mkdir -p "$data"
     dc up -d --build
-    echo "$env: $url (DB 초기화)"
+    echo "$env: $(url) (DB 초기화)"
     ;;
   logs) dc logs -f ;;
   ps) dc ps ;;

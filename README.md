@@ -5,7 +5,7 @@
 ```
 Mac (OrbStack)
 └─ Docker container  ─  FastAPI + uvicorn (process 1개)
-   ├─ Web UI (prod 127.0.0.1:8080, dev 127.0.0.1:8081)
+   ├─ Web UI (prod 127.0.0.1:8080, dev 127.0.0.1:8081, 포트는 .env로 변경)
    ├─ Scheduler (asyncio, 주기는 런타임에 변경 가능)
    ├─ Crawler ── Playwright Chromium (--headless=new, ECH) ──→ 토렌트 사이트 3곳
    ├─ Doctor ─── Claude Agent SDK + 전용 진단 도구
@@ -26,9 +26,10 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 | `CLAUDE_CODE_OAUTH_TOKEN` | Doctor용 Claude 인증. `ANTHROPIC_API_KEY`로 대신해도 된다(둘 중 하나). |
 | `TRANSMISSION_URL` | Pi RPC 주소. 예: `http://192.168.0.10:59090/transmission/rpc` |
 | `TRANSMISSION_USER`, `TRANSMISSION_PASSWORD` | Transmission RPC 계정 |
+| `PROD_PORT`, `DEV_PORT` | 웹 UI 포트(127.0.0.1). 기본 8080, 8081 |
 
 2. `./server.sh prod up`
-3. 브라우저에서 `http://127.0.0.1:8080`에 접속한다. 인증이 없으므로 이 Mac에서만 열린다.
+3. 브라우저에서 `http://127.0.0.1:8080`(`PROD_PORT`)에 접속한다. 인증이 없으므로 이 Mac에서만 열린다.
 
 ## 서버 구동
 
@@ -36,7 +37,7 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 
 | | dev | prod |
 |---|---|---|
-| 주소 | http://127.0.0.1:8081 | http://127.0.0.1:8080 |
+| 주소 | http://127.0.0.1:8081 (`DEV_PORT`) | http://127.0.0.1:8080 (`PROD_PORT`) |
 | compose 파일 | `compose.dev.yaml` (프로젝트 `torrent_web_scraper-dev`) | `compose.yaml` (프로젝트 `torrent_web_scraper`) |
 | DB | `./data/dev/app.db` | `./data/prod/app.db` |
 | 크롤링 | 모든 실행이 dry-run. Transmission 추가, 다운로드 기록, 사이트 URL 변경, `last_ok_at` 갱신을 하지 않는다 | Transmission에 실제로 추가한다 |

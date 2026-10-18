@@ -28,13 +28,13 @@ Environments. Both run in Docker on the Mac from the same image build and share 
 |---|---|---|
 | compose file / project | `compose.dev.yaml` / `torrent_web_scraper-dev` | `compose.yaml` / `torrent_web_scraper` |
 | `APP_ENV` | `dev` (every scheduled run and `python -m app.scheduler` is a dry run) | `prod` |
-| port | `127.0.0.1:8081` | `127.0.0.1:8080` |
+| port | `127.0.0.1:${DEV_PORT:-8081}` | `127.0.0.1:${PROD_PORT:-8080}` |
 | data volume | `./data/dev:/data` | `./data/prod:/data` |
 | code | `./app:/app/app` bind mount, `uvicorn --reload --reload-dir app` | baked into the image |
 | restart | none | `unless-stopped` |
 | UI | `DEV · dry-run` badge in the nav, `[dev]` title prefix (`APP_ENV` is a Jinja global in both template environments) | — |
 
-`server.sh` commands: `up` (`up -d --build`), `down`, `restart`, `reset` (down, delete `app.db` and its WAL/SHM, up; prod asks to type `prod`), `logs`, `ps`, `dry-run` (`run --rm scraper python -m app.scheduler --dry-run`).
+Ports come from `.env` via compose interpolation; the container always listens on 8080. `server.sh` prints the URL from `docker compose port scraper 8080`. Commands: `up` (`up -d --build`), `down`, `restart`, `reset` (down, delete `app.db` and its WAL/SHM, up; prod asks to type `prod`), `logs`, `ps`, `dry-run` (`run --rm scraper python -m app.scheduler --dry-run`).
 
 ### app/crawler.py: pure functions, no I/O
 ```python
