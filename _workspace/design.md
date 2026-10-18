@@ -494,7 +494,7 @@ Background tasks are kept in a module-level set: `_tasks: set[asyncio.Task]`, wi
 | POST `/sites/{id}/doctor` | `model` ∈ `db.MODELS`, else 400 | 404 if no site. Only `rid = create_doctor_report` and spawn `run_doctor` as a task in `_tasks`; the busy check is inside `run_doctor`. | 303 `/doctor/{rid}` |
 | GET `/doctor/{id}` | | 404 if no report. Renders `doctor.html` with `report`, `site`, `data` (`json.loads(report_json)` or None). | 200 |
 | GET `/doctor/{id}/progress` | | Returns `<pre id="progress" class="log" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{logmark(progress)}</pre>`, built inline (same element as in `doctor.html`). When status ≠ running, the same `<pre>` comes back without `hx-*` attributes plus the header `HX-Refresh: true`, so the page reloads with the full report. | 200 |
-| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 400. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 400. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites?msg=applied` |
+| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 303 `/sites?error=<msg>`. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 303 `/sites?error=<msg>`. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites?msg=applied` |
 
 `doctor.html` extends `base.html`. While running it loads `<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-…" crossorigin="anonymous">` (SRI) in `{% block head %}`. It shows (layout: `_workspace/design-spec.md` §5.6):
 - model, started time, and cost (`%.3f`) or "진행 중 · 상한 $1"
@@ -521,10 +521,10 @@ await sched.stop(); await browser.stop(); conn.close()
 |---|---|---|---|
 | GET `/` | | `index.html` | |
 | POST `/run-now` | | `ok = sched.trigger_now()` | 303 `/` (`/?msg=already-running` if not ok) |
-| POST `/settings/interval` | `minutes: int = Form(ge=1, le=1440)` | `sched.set_interval` | 303 `/` |
-| POST `/settings/doctor-model` | `model` ∈ `db.MODELS`, else 400 | `set_setting("doctor_model")` | 303 `/sites` |
-| GET `/programs` | `?error=` | `programs.html` | |
-| POST `/programs` | `name`, `resolution` ∈ {720p, 1080p, any} | `add_program`; ValueError gives `?error=<msg>` | 303 `/programs` |
+| POST `/settings/interval` | `minutes: int = Form(ge=1, le=1440)` | `sched.set_interval` | 303 `/?msg=interval` |
+| POST `/settings/doctor-model` | `model` ∈ `db.MODELS`, else 400 | `set_setting("doctor_model")` | 303 `/sites?msg=model` |
+| GET `/programs` | `?error=`, `?msg=` | `programs.html` | |
+| POST `/programs` | `name`, `resolution` ∈ {720p, 1080p, any} | `add_program`; ValueError gives `?error=<msg>` | 303 `/programs?msg=added` |
 | POST `/programs/{id}/enabled` | `enabled` ("1"/"0") | `set_program_enabled` | 303 `/programs` |
 | POST `/programs/{id}/delete` | | `delete_program` | 303 `/programs` |
 | GET `/sites` | | `sites.html` | |
