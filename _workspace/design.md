@@ -435,7 +435,8 @@ VERDICTS:
 - ok: run_parser finds posts and extracts a magnet hash.
 - domain_moved: the configured domain no longer serves the board (DNS failure, parked page, redirect elsewhere) and/or probe_domains finds a working +N domain.
 - blocked: DNS resolves but browse fails with ERR_CONNECTION_CLOSED/RESET, or lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해").
-- site_down: TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- site_down: no recent crawler success and TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- transient: the site is unreachable right now (connection resets / timeouts across retries) but the crawler succeeded recently (within the last few hours). Likely a temporary ECH/DNS fallback or network blip; say in summary to re-check later. suggested_fix stays null.
 - cloudflare: browse shows a Cloudflare challenge (cloudflare_challenge: yes, often 403/503).
 - parser_broken: browse returns the real board with visible posts, but run_parser finds 0 posts or no magnet.
 If probe_domains marks a candidate "<- works", the verdict is domain_moved even when the configured domain looks blocked or down, and suggested_fix.url is that candidate.
@@ -447,7 +448,7 @@ User prompt: `Site: {name}\nbase_url: {url}\nboards: {boards json}\nlast_ok_at: 
 ### Schema
 ```python
 SCHEMA = {"type": "object", "required": ["verdict", "summary", "evidence", "suggested_fix"], "properties": {
-  "verdict": {"type": "string", "enum": ["ok","domain_moved","blocked","site_down","cloudflare","parser_broken"]},
+  "verdict": {"type": "string", "enum": ["ok","domain_moved","blocked","site_down","transient","cloudflare","parser_broken"]},
   "summary": {"type": "string"},
   "evidence": {"type": "array", "items": {"type": "string"}},
   "suggested_fix": {"type": "object", "required": ["url", "boards"], "properties": {

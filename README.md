@@ -106,6 +106,7 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 | `domain_moved` | 도메인 이전 |
 | `blocked` | 차단 |
 | `site_down` | 사이트 다운 |
+| `transient` | 일시 장애 (지금은 접속 안 되지만 최근 크롤링은 성공) |
 | `cloudflare` | Cloudflare 사람 인증 필요 |
 | `parser_broken` | 사이트는 정상인데 파서가 실패 |
 

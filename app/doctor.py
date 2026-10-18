@@ -38,13 +38,14 @@ IMPORTANT FACT: Korean ISPs reset plain TLS connections that carry these sites' 
 
 TRANSIENT RESETS: our Chromium sometimes connects without ECH for a short window (its DNS HTTPS record came late) and gets reset. browse already retries resets ~30 s apart.
 - "transient: yes" in browse = the site is reachable, not blocked. Continue with run_parser and judge as usual (ok if it works); mention the transient failure in evidence.
-- If the crawler log shows posts for this site in the last few hours (compare run start times with "now") and only browse fails, call browse once more. If it still fails, say in summary it is likely a temporary ECH/DNS fallback, not a lasting block.
+- If the crawler log shows posts for this site in the last few hours (compare run start times with "now") and only browse fails, call browse once more. If it still fails, the verdict is transient.
 
 VERDICTS:
 - ok: run_parser finds posts and extracts a magnet hash.
 - domain_moved: the configured domain no longer serves the board (DNS failure, parked page, redirect elsewhere) and/or probe_domains finds a working +N domain.
 - blocked: browse lands on a government warning page (warning.or.kr, "법적 사유", "불법·유해"), or browse fails with ERR_CONNECTION_CLOSED/RESET on every attempt AND the crawler log shows no recent success.
-- site_down: TCP connect fails or times out, HTTP 5xx / Cloudflare 52x error pages, or resets persist although the crawler succeeded recently (temporarily unreachable).
+- site_down: no recent crawler success and TCP connect fails or times out, or HTTP 5xx / Cloudflare 52x error pages.
+- transient: the site is unreachable right now (connection resets / timeouts across retries) but the crawler succeeded recently (within the last few hours). Likely a temporary ECH/DNS fallback or network blip; say in summary to re-check later. suggested_fix stays null.
 - cloudflare: browse shows a Cloudflare challenge (cloudflare_challenge: yes, often 403/503).
 - parser_broken: browse returns the real board with visible posts, but run_parser finds 0 posts or no magnet.
 If probe_domains marks a candidate "<- works", the verdict is domain_moved even when the configured domain looks blocked or down, and suggested_fix.url is that candidate.
@@ -52,7 +53,7 @@ If probe_domains marks a candidate "<- works", the verdict is domain_moved even 
 OUTPUT: summary and evidence in Korean. evidence = short factual lines quoting tool output. Put a value in suggested_fix.url or suggested_fix.boards ONLY when a tool result proves it works (e.g. probe_domains "<- works", or run_parser succeeding on that base_url); otherwise null."""
 
 SCHEMA = {"type": "object", "required": ["verdict", "summary", "evidence", "suggested_fix"], "properties": {
-    "verdict": {"type": "string", "enum": ["ok", "domain_moved", "blocked", "site_down", "cloudflare", "parser_broken"]},
+    "verdict": {"type": "string", "enum": ["ok", "domain_moved", "blocked", "site_down", "transient", "cloudflare", "parser_broken"]},
     "summary": {"type": "string"},
     "evidence": {"type": "array", "items": {"type": "string"}},
     "suggested_fix": {"type": "object", "required": ["url", "boards"], "properties": {

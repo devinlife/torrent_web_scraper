@@ -232,7 +232,7 @@ form.inline { display: inline; margin: 0; }
 }
 .badge > i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .badge.ok, .badge.done { background: var(--ok-bg); color: var(--ok); }
-.badge.warn, .badge.partial, .badge.domain_moved { background: var(--warn-bg); color: var(--warn); }
+.badge.warn, .badge.partial, .badge.domain_moved, .badge.transient { background: var(--warn-bg); color: var(--warn); }
 .badge.bad, .badge.error, .badge.blocked, .badge.site_down, .badge.cloudflare, .badge.parser_broken {
   background: var(--bad-bg); color: var(--bad);
 }

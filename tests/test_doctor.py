@@ -79,3 +79,9 @@ def test_dns_tls_notes_real_sni_failure(monkeypatch):
     out = doctor._dns_tls("a.com")
     assert out[-3].startswith("tls sni=a.com: FAIL") and out[-2] == "tls sni=www.google.com: ok TLSv1.3"
     assert out[-1].startswith("note: this stdlib TLS probe cannot use ECH")
+
+
+def test_transient_verdict_has_label():
+    from app.views import LABEL
+    assert set(doctor.SCHEMA["properties"]["verdict"]["enum"]) <= set(LABEL)
+    assert LABEL["transient"] == "일시 장애"

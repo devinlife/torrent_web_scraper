@@ -12,7 +12,7 @@
 </div>
 
 {% if running %}{% set tone, title = "is-run", "진단 중입니다 · 상한 $1" %}
-{% elif data %}{% set tone, title = {"ok": "is-ok", "domain_moved": "is-warn"}.get(data.verdict, "is-bad"), LABEL.get(data.verdict, data.verdict) %}
+{% elif data %}{% set tone, title = {"ok": "is-ok", "domain_moved": "is-warn", "transient": "is-warn"}.get(data.verdict, "is-bad"), LABEL.get(data.verdict, data.verdict) %}
 {% else %}{% set tone, title = "is-bad", "진단을 끝내지 못했습니다" %}{% endif %}
 <section class="card hero {{ tone }}" aria-label="진단 결과">
   <p class="hero-title"><i></i>{{ title }}</p>
