@@ -46,8 +46,10 @@ def dur(start, end) -> str:
     return f"{m}분 {s}초" if m else f"{s}초"
 
 
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL)
+HERE = Path(__file__).parent
+templates = Jinja2Templates(directory=HERE / "templates")
+CSS_V = int((HERE / "static" / "app.css").stat().st_mtime)  # cache-buster; uvicorn --reload watches *.py only
+templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, CSS_V=CSS_V)
 templates.env.filters.update(dt=dt, ago=ago, dur=dur)
 templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}  # readable confirm() text
 

@@ -5,10 +5,12 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from http import HTTPStatus
+from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import config, db, doctor
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(doctor.router)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 def page(request: Request, name: str, status_code: int = 200, **ctx):

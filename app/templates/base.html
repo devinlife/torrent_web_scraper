@@ -4,63 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% if APP_ENV == "dev" %}[dev] {% endif %}{% block title %}torrent{% endblock %} · torrent</title>
-<style>
-  :root {
-    color-scheme: light dark;
-    --fg: light-dark(#222, #ddd); --muted: light-dark(#666, #a0a0a0); --off: light-dark(#767676, #8a8a8a);
-    --line: light-dark(#ddd, #3a3a3a); --soft: light-dark(#f6f6f6, #1e1e1e); --link: light-dark(#0b5cad, #6ea8fe);
-    --ok: light-dark(#1e7b34, #6fcf87); --ok-bg: light-dark(#e3f4e5, #12301a);
-    --warn: light-dark(#8a5a00, #f0c060); --warn-bg: light-dark(#fdf1d8, #3a2c0a);
-    --bad: light-dark(#a12622, #f28b82); --bad-bg: light-dark(#fdecea, #3b1513);
-    --run: light-dark(#1d5bb8, #8ab4f8); --run-bg: light-dark(#e3edfb, #152a4a);
-    --env: light-dark(#6b2fa3, #d0a8f5); --env-bg: light-dark(#f1e6fb, #2e1a42);
-  }
-  body { font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
-         max-width: 960px; margin: 0 auto; padding: 0 16px 40px; color: var(--fg); background: Canvas;
-         line-height: 1.4; word-break: keep-all; }
-  nav { display: flex; gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line);
-        margin-bottom: 16px; }
-  nav a { font-weight: 600; padding-bottom: 2px; border-bottom: 2px solid transparent; }
-  nav a[aria-current=page] { border-bottom-color: currentColor; }
-  a { color: var(--link); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  h1 { font-size: 1.4em; } h2 { font-size: 1.1em; margin-top: 28px; }
-  .table { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
-  td { overflow-wrap: anywhere; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  th { background: var(--soft); }
-  tr.off td { color: var(--off); }
-  form.inline { display: inline; margin: 0; }
-  form.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
-  input, select, textarea, button { font: inherit; font-size: 14px; }
-  textarea, input[type=url] { width: 100%; box-sizing: border-box; }
-  label.block { display: block; margin: 6px 0; }
-  button { cursor: pointer; padding: 2px 10px; white-space: nowrap; }
-  button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-  button.primary { background: var(--link); color: Canvas; border: 1px solid var(--link); border-radius: 4px; }
-  button.danger { color: var(--bad); border: 1px solid var(--bad); background: transparent; border-radius: 4px; }
-  pre { background: var(--soft); border: 1px solid var(--line); padding: 12px; overflow-x: auto;
-        white-space: pre-wrap; font-size: 13px; }
-  .muted { color: var(--muted); }
-  .flash { padding: 8px 12px; border-radius: 4px; background: var(--bad-bg); color: var(--bad); }
-  .flash.info { background: var(--run-bg); color: var(--run); }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
-           font-weight: 600; background: var(--soft); color: var(--fg); }
-  .badge.ok, .badge.done { background: var(--ok-bg); color: var(--ok); }
-  .badge.partial, .badge.domain_moved { background: var(--warn-bg); color: var(--warn); }
-  .badge.error, .badge.blocked, .badge.site_down, .badge.cloudflare, .badge.parser_broken
-         { background: var(--bad-bg); color: var(--bad); }
-  .badge.running { background: var(--run-bg); color: var(--run); }
-  .badge.env { background: var(--env-bg); color: var(--env); }
-</style>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" crossorigin="anonymous"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
+      integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0">
+<link rel="stylesheet" href="/static/app.css?v={{ CSS_V }}">
 {% block head %}{% endblock %}
 </head>
 <body>
 {% set p = request.url.path %}{% set cur = "/sites" if p.startswith(("/sites", "/doctor")) else "/programs" if p.startswith("/programs") else "/" %}
-<nav>{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}
-{% if APP_ENV == "dev" %}<span class="badge env" title="Transmission 추가와 사이트 URL 변경을 하지 않는다">DEV · dry-run</span>{% endif %}</nav>
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="/">torrent</a>
+  <nav class="nav" aria-label="주 메뉴">{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}</nav>
+  {% if APP_ENV == "dev" %}<span class="badge env">DEV</span>{% endif %}
+</div></header>
+{% if APP_ENV == "dev" %}<div class="envbar"><div class="wrap">DEV · dry-run — Transmission 추가, 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다</div></div>{% endif %}
+<main class="main wrap">
 {% block content %}{% endblock %}
+</main>
 </body>
 </html>
