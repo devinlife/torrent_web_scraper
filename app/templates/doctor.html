@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Doctor · {{ report.site_name }}{% endblock %}
+{% block head %}<script src="https://unpkg.com/htmx.org@2.0.4"></script>{% endblock %}
+{% block content %}
+<h1>Doctor: {{ report.site_name }}</h1>
+<p>
+  <span class="badge {{ report.verdict or report.status }}">{{ report.verdict or report.status }}</span>
+  <span class="muted">model {{ report.model }} · 비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }} · 시작 {{ report.started }}</span>
+</p>
+{% if site %}<p class="muted">현재 설정: {{ site.url }} {{ site.boards|join(" ") }}</p>{% endif %}
+
+{% if report.status == "running" %}
+<pre id="progress" hx-get="/doctor/{{ report.id }}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{{ report.progress }}</pre>
+{% else %}
+<pre id="progress">{{ report.progress }}</pre>
+{% endif %}
+
+{% if data %}
+<h2>요약</h2>
+<p>{{ data.summary }}</p>
+<ul>{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+{% set fix = data.suggested_fix or {} %}
+{% if fix.url or fix.boards %}
+<h2>수정 제안</h2>
+<form method="post" action="/doctor/{{ report.id }}/apply">
+  {% if fix.url %}<p>url: <code>{{ fix.url }}</code></p>{% endif %}
+  {% if fix.boards %}<p>boards: {% for b in fix.boards %}<code>{{ b }}</code> {% endfor %}</p>{% endif %}
+  <button>적용</button>
+</form>
+{% endif %}
+{% endif %}
+<p><a href="/sites">← 사이트</a></p>
+{% endblock %}
