@@ -69,16 +69,16 @@ Mac (OrbStack)
 
 | 도구 | 하는 일 |
 |---|---|
-| `dns_tls_check(host)` | DNS 조회, TLS 연결, 가짜 SNI 비교 → 도메인 소멸, 차단, 다운 구분 |
+| `dns_tls_check(host)` | DNS 조회, TCP 연결, TLS 연결(실제 SNI, 가짜 SNI) 결과를 사실로만 돌려줌. 실측 결과 실제 SNI TLS는 정상 사이트에서도 모두 끊기고(ISP 차단), 가짜 SNI 비교는 Cloudflare 호스팅 사이트에서 차이가 없어 구분에 쓰지 못합니다. 접속 가능 여부는 `browse`로 판단합니다 |
 | `browse(url)` | Chromium으로 접속해서 상태 코드, 리다이렉트, 제목, 축약 HTML, CF 챌린지 여부 확인 |
-| `run_parser(site)` | 우리 크롤러 파서를 그대로 실행 → 게시글 수, 매칭 예시, magnet 추출 결과 |
-| `probe_domains(site)` | 도메인 숫자 +1부터 +5까지 탐색 |
+| `run_parser(base_url)` | 우리 크롤러 파서를 그대로 실행 → 게시글 수, 매칭 예시, magnet 추출 결과 |
+| `probe_domains()` | 도메인 숫자 +1부터 +5까지 탐색. 글이 나오는 후보가 있으면 판정은 `domain_moved` |
 
 **모델**: 기본은 Sonnet(최신)이고, 화면에서 Opus로 바꿀 수 있습니다. 버전 대신 별칭(`sonnet` / `opus`)으로 지정해서 항상 최신을 씁니다.
 
 **안전장치**
 - 실행당 최대 15턴, 비용 상한 $1을 둡니다.
-- 읽기 전용 도구만 줍니다.
+- 읽기 전용 도구만 줍니다. 도구는 공개 http(s) 주소만 열고(IP, localhost 등 거부), 결과 길이를 제한합니다.
 - 수정 제안은 사용자가 [적용] 버튼으로 반영합니다. 사이트 HTML을 지시가 아닌 데이터로 취급하기 위해서입니다.
 
 **출력**: JSON 스키마(`verdict`, `summary`, `evidence[]`, `suggested_fix{url, boards}`)로 받습니다. 진행 상황은 화면에서 실시간으로 보여주고, 리포트와 실제 비용을 저장합니다.
@@ -106,7 +106,7 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 | `settings` | key, value (`interval_min`, `doctor_model` 등) |
 | `runs` | id, started, finished, status, matched, added, log |
 | `downloads` | info_hash (PK), program_id, episode, title, site, added_at. `UNIQUE(program_id, episode)` |
-| `doctor_reports` | id, site_id, started, status, model, verdict, report_json, cost_usd |
+| `doctor_reports` | id, site_id, started, status, model, verdict, report_json, cost_usd, progress(진행 로그) |
 
 비밀값(Claude 토큰, Transmission 계정)은 `.env`에만 둡니다. `.env`는 이미 준비되어 있고(권한 600) git 추적에서 제외되어 있습니다.
 
@@ -116,26 +116,26 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 
 | 사이트 | URL | 게시판 | 상태 |
 |---|---|---|---|
-| 토렌트썸 | https://torrentsome268.com | `/v-4-16` (예능) 외 | 켬 |
-| 토렌트좋다 | https://torrentzota206.com | `/t/4/16.html` (예능) 외 | 켬 |
-| 토렌트티티 | https://torrenttt253.top | `/c/4` (영상·음악) | 켬 |
-| 토렌트알지 | https://torrentrj274.com | `/v-4-16` | 끔 (예비) |
-| 토렌트밤 | https://torrentbam252.top | `/c/4` | 끔 (예비) |
+| 토렌트썸 | https://torrentsome268.com | `/v-4-16`, `/v-2-13`, `/v-4-17` | 켬 |
+| 토렌트좋다 | https://torrentzota206.com | `/t/4/16.html`, `/t/2/13.html`, `/t/4/17.html` | 켬 |
+| 토렌트티티 | https://torrenttt253.top | `/c/4/16`, `/c/2/13`, `/c/4/17` | 켬 |
+| 토렌트알지 | https://torrentrj274.com | 썸과 같음 | 끔 (예비) |
+| 토렌트밤 | https://torrentbam252.top | 티티와 같음 | 끔 (예비) |
 
-드라마와 시사 게시판 경로는 구현할 때 확정합니다.
+게시판은 사이트마다 예능(`4/16`), 한국드라마(`2/13`), 다큐·교양(`4/17`) 3개입니다. 시사 게시판은 따로 없고 시사 프로그램은 다큐·교양에 올라옵니다.
 
-**프로그램**: Pi의 기존 규칙 17개를 가져옵니다. 추천 프로그램인 놀면 뭐하니와 라디오스타는 켠 상태로 둡니다.
+**프로그램**: Pi의 기존 규칙 17개를 모두 가져오되 놀면 뭐하니와 라디오스타만 켜고 나머지는 꺼 둡니다. 방영 여부를 모르는 프로그램을 켜 두면 원치 않는 다운로드가 생길 수 있기 때문입니다. 필요한 것은 화면에서 켭니다.
 
 라디오스타, 돌싱포맨, PD 수첩(720p), 나 혼자 산다, 미운 우리 새끼, SBS 스페셜(720p), 그것이 알고 싶다, 금쪽 같은(720p), 놀면 뭐하니, 나는 솔로, 전지적, 유 퀴즈, 알쓸인잡, 지구오락실, 태어난, 애프터시그널, 사랑은 계속된다
 
 - 기존 규칙의 릴리즈 그룹 필터(NEXT)는 없앱니다. 같은 회차가 다른 릴리즈로 다시 받아지는 것은 F3의 회차 중복 방지로 막습니다.
-- **미정**: 현재 방영하지 않는 프로그램을 꺼진 상태로 가져올지 정해야 합니다.
 
 ## 9. 배포와 운영
 
-- 배포는 `.env`를 준비한 뒤 `docker compose up -d` 한 줄입니다. OrbStack이 실행되면 컨테이너도 자동으로 시작됩니다(`restart: unless-stopped`).
+- 배포는 `.env`를 준비한 뒤 `docker compose up -d --build` 한 줄입니다. OrbStack이 실행되면 컨테이너도 자동으로 시작됩니다(`restart: unless-stopped`).
 - 베이스 이미지는 `mcr.microsoft.com/playwright/python:v1.48.0-noble`입니다. 의존성은 uv로 관리합니다(`pyproject.toml`, `uv.lock`).
-- Mac이 잠자는 동안에는 크롤링하지 않습니다. 깨어나면 다음 주기에 바로 실행합니다.
+- Mac이 잠자는 동안에는 크롤링하지 않습니다. 스케줄러가 60초마다 실제 시각을 다시 확인하므로, 깨어난 뒤 예정 시각이 지났으면 1분 안에 실행합니다.
+- 컨테이너가 LAN의 Pi에 닿으려면 macOS 로컬 네트워크 권한에서 OrbStack을 허용해야 합니다. 꺼져 있으면 실행 기록에 `transmission FAIL ... timed out`이 남고 상태가 `partial`이 됩니다.
 - 웹 UI는 인증이 없으므로 이 Mac(127.0.0.1:8080)에서만 열립니다.
 
 ## 10. 범위 밖 (v2에서 하지 않는 것)
@@ -153,20 +153,21 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 | 위험 | 대응 |
 |---|---|
 | 사이트 도메인이 자주 바뀜 | 자동 탐색으로 처리하고, 실패하면 Doctor로 진단 |
-| 도메인별 첫 접속이 간헐적으로 실패 | 재시도 2회 |
+| 접속이 간헐적으로 실패(실측: 약 20초 동안 `ERR_CONNECTION_CLOSED`가 연속) | 재시도 2회. 도메인을 옮기기 전에 원래 URL을 한 번 더 확인해서 일시 오류로 미러에 옮겨가지 않게 합니다 |
+| 번호만 다른 미러 도메인이 여러 개 살아 있음 | 첫 게시판이 실패할 때만 +1..+5를 탐색하고, 원래 URL이 여전히 실패할 때만 옮깁니다 |
 | ISP가 ECH까지 차단할 가능성 | 그때는 VPN이나 프록시 같은 다른 접속 경로가 필요합니다. 현재는 대응 범위 밖입니다 |
 | OAuth 토큰 사용 | 본인이 개인적으로 쓰는 범위로 한정합니다. 다른 사람에게 서비스로 제공하면 정책상 API 키가 필요합니다 |
 
 ## 12. 구현 단계
 
-| # | 작업 | 확인 방법 |
-|---|---|---|
-| 1 | Docker 골격 (일부 완료) | 컨테이너에서 3개 사이트 접속, Agent SDK 동작 (완료) |
-| 2 | 크롤러와 테스트 | 테스트 통과, dry-run 매칭 결과 확인 |
-| 3 | DB, 스케줄러, RPC | 1건 실제 추가 후 Pi Transmission에서 확인, 주기 변경 즉시 반영 |
-| 4 | 웹 화면 | 브라우저에서 등록 → 실행 → 기록 확인 |
-| 5 | Doctor | 정상 사이트는 `ok`, 막힌 사이트(torrenttop)는 `blocked`, 파서를 일부러 망가뜨리면 `parser_broken` |
-| 6 | 초기 데이터 이전과 옛 코드 정리 | `/programs`에 17개 표시, README 갱신 |
+| # | 작업 | 확인 방법 | 결과 |
+|---|---|---|---|
+| 1 | Docker 골격 | 컨테이너에서 3개 사이트 접속, Agent SDK 동작 | 완료 |
+| 2 | 크롤러와 테스트 | 테스트 통과, dry-run 매칭 결과 확인 | 완료: `uv run pytest -q` 56개 통과, dry-run 매칭 확인 |
+| 3 | DB, 스케줄러, RPC | 1건 실제 추가 후 Pi Transmission에서 확인, 주기 변경 즉시 반영 | 완료: 컨테이너에서 RPC 왕복 확인. 새 회차가 없어 실제 `added`는 관찰하지 못했고 `duplicate` 응답을 확인. 2분 주기 실행 확인 |
+| 4 | 웹 화면 | 브라우저에서 등록 → 실행 → 기록 확인 | 완료 |
+| 5 | Doctor | 정상 사이트는 `ok`, 막힌 사이트(torrenttop)는 `blocked`, 파서를 일부러 망가뜨리면 `parser_broken` | 완료: `ok`, `blocked`, `domain_moved`, `parser_broken` 모두 확인 |
+| 6 | 초기 데이터 이전과 옛 코드 정리 | `/programs`에 17개 표시, README 갱신 | 완료 |
 
 ## 부록 A. 사이트 점검 결과 (2026-10-18)
 
@@ -175,7 +176,7 @@ SQLite(stdlib `sqlite3`, ORM 없음)에 테이블 6개를 둡니다.
 | 토렌트썸 268 | ✅ | ✅ 720p 에피소드 84건 | 엔진 A `/v-4-16` → `/v/{id}` | 상세 HTML에 있음 | 선정 |
 | 토렌트알지 274 | ✅ | ✅ 64건 | 엔진 A (썸과 같은 엔진) | 있음 | 예비 |
 | 토렌트좋다 206 | ✅ | ✅ 72건 | 엔진 A 변형 `/t/4/16.html` → `/torrent/{id}.html` | 있음 | 선정 |
-| 토렌트티티 253 | ✅ | ✅ 70건 | 엔진 B `/c/4` → `/t/{slug}.html` | 있음, `btih:`가 빠진 형식 | 선정, 정규화 필요 |
+| 토렌트티티 253 | ✅ | ✅ 70건 | 엔진 B `/c/4/16` → `/t/{slug}.html` | 있음, `btih:`가 빠진 형식 | 선정, 정규화 필요 |
 | 토렌트밤 252 | ✅ | ✅ 54건 | 엔진 B (티티와 같은 엔진) | 위와 같음 | 예비 |
 | 토렌트봇 264 | ✅ (CF 자동 통과) | ❌ headless는 CF 403 | `/topic/{id}` | 있음 | 제외 |
 | 토렌트씨 359 | ❌ Turnstile 사람 인증 | ❌ | | | 제외 |

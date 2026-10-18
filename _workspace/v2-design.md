@@ -3,7 +3,7 @@
 Sources, in order of precedence: research (`research-crawler.md`, `research-sdk.md`) > `v2-arch-constraints.md` > `v2-plan.md`. Fixture checks behind the numbers here were run on 2026-10-18 with stdlib `html.parser`.
 
 Global rules (everyone):
-- Python 3.12. No new runtime dependencies. Add pytest as a dev dependency with `uv add --dev pytest`. Add `[tool.pytest.ini_options] pythonpath = ["."]` to `pyproject.toml`; without it `import app` fails from `tests/`.
+- Python 3.12, pinned via `.python-version`. No new runtime dependencies. Add pytest as a dev dependency with `uv add --dev pytest`. Add `[tool.pytest.ini_options] pythonpath = ["."]` to `pyproject.toml`; without it `import app` fails from `tests/`.
 - Timestamps come from `db.now()`, which returns `datetime.now().isoformat(timespec="seconds")` (local time, TZ=Asia/Seoul).
 - All `db.*` calls happen on the event-loop thread only. Never call them inside `asyncio.to_thread`.
 - Secrets never go into logs, reports or the progress text.
@@ -97,7 +97,7 @@ self._ctx = await self._browser.new_context(locale="ko-KR")
 
 `fetch` does the following:
 - The whole call, including retries, runs under `async with self._lock`, a single `asyncio.Lock`.
-- Inside the lock, if `self._browser is None or not self._browser.is_connected()`, it relaunches the browser and context. This is crash recovery and also allows lazy start.
+- Inside the lock, if `self._ctx is None`, `self._browser is None` or `not self._browser.is_connected()`, it closes the dead browser (keeping the playwright driver) and calls `start()` again. `start()` sets `self._ctx = None` first, so a launch that fails halfway is retried on the next fetch. A relaunch failure comes back as `FetchResult(0, url, "", err)`, never raised. This is crash recovery and also allows lazy start.
 - Each attempt:
   1. `page = await ctx.new_page()`
   2. `resp = await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)`
@@ -119,7 +119,7 @@ def rpc(method: str, **arguments) -> dict
 def add_magnet(magnet: str) -> str
 ```
 - `rpc` is the verified stdlib snippet from research-sdk section 8. It reads `config.TRANSMISSION_*` at call time, uses a module-level `_sid`, a 10 s timeout, and retries once on 409.
-- Every failure raises `TransmissionError`: `URLError`, any `HTTPError` other than 409, `result != "success"`, and 409 twice. Messages contain only the class and reason, never the auth header.
+- Every failure raises `TransmissionError` (`from None`): `URLError`, `OSError` (e.g. socket timeout), `ValueError` (e.g. empty `TRANSMISSION_URL`), `http.client.HTTPException`, any `HTTPError` other than 409, `result != "success"`, and 409 twice. Messages contain only the class and reason, never the auth header.
 - `add_magnet` calls `rpc("torrent-add", filename=magnet)`. It returns `"added"` when `"torrent-added"` is in the result, `"duplicate"` when `"torrent-duplicate"` is, and otherwise raises `TransmissionError`.
 - It is blocking. Callers use `await asyncio.to_thread(add_magnet, m)`.
 
@@ -139,13 +139,17 @@ class Scheduler:
 ```
 Full algorithm in section 4.
 
-`if __name__ == "__main__":` supports `python -m app.scheduler --dry-run`. It opens `db.connect(config.DB_PATH)`, starts a `Browser`, calls `run_once(..., dry_run=True)`, prints `get_run(id)["log"]` and stops the browser. Total is about 10 lines.
+`if __name__ == "__main__":` supports `python -m app.scheduler --dry-run`. It opens `db.connect(config.DB_PATH)`, starts a `Browser`, calls `run_once(..., dry_run="--dry-run" in sys.argv)`, prints `get_run(id)["log"]` and stops the browser. Without the flag it does a real run (Transmission adds, domain moves). Total is about 10 lines.
 
 ### app/doctor.py (C), see section 5. Public surface
 ```python
 router: APIRouter
 LOCK: asyncio.Lock
+_tasks: set[asyncio.Task]                            # running doctor tasks; main.py cancels them on shutdown
 async def run_doctor(conn, browser, report_id: int, site: dict, model: str) -> None  # never raises
+def build_tools(conn, browser, site: dict) -> list    # the 4 tools as closures
+def _public_http_url(url: str) -> bool               # SSRF guard (tested)
+def _trim_html(h: str) -> str                        # board-sized HTML for the model (tested)
 ```
 
 ### app/main.py (B), see section 6. Public surface: `app: FastAPI`.
@@ -224,6 +228,11 @@ Settings: `interval_min=60`, `doctor_model=sonnet`.
 
 Functions. All take `conn` first and return `dict` rows (`dict(row)`); sites come back with `boards` decoded to `list[str]`.
 ```python
+RESOLUTIONS = ("720p", "1080p", "any"); MODELS = ("sonnet", "opus")
+URL_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(?::\d+)?$"); BOARD_RE = re.compile(r"^/\S*$")
+def clean_site_fields(url: str, boards: list[str]) -> tuple[str, list[str]]
+    # shared by POST /sites/{id} and Doctor apply. url.strip().rstrip("/"); boards stripped, blanks dropped.
+    # ValueError: "bad url" (not URL_RE), "bad board: <b>" (not BOARD_RE), "boards empty"
 def now() -> str
 def connect(path: str | Path) -> sqlite3.Connection
     # mkdir parent, pragmas, DDL, seed, then mark stale: runs/doctor_reports with status='running' -> 'error' (+ "interrupted by restart" appended to log/progress). Idempotent.
@@ -321,7 +330,7 @@ Dry-run rule: `dry_run` persists nothing but the run record (`create_run`/`finis
 
 Status rule:
 - `ok`: every enabled site and board worked and no detail or Transmission step failed.
-- `partial`: at least one site worked, but some site, detail or Transmission step failed.
+- `partial`: at least one site worked, but some site, board, detail or Transmission step failed. A site with at least one working board counts as worked and gets `last_ok_at`.
 - `error`: no site worked, or an exception was raised.
 
 Every site line contains `site {name}:`. Doctor greps on that.
@@ -335,7 +344,7 @@ while True:
   if self._now or datetime.now() >= self.next_run_at:
       self._now = False
       try: await self._run()
-      except Exception: logging.exception("scheduler")
+      except Exception: logging.exception("scheduler"); await asyncio.sleep(60)   # no hot spin if create_run fails
       continue
   self._wake.clear()
   try: await asyncio.wait_for(self._wake.wait(), timeout=min(60, (self.next_run_at - datetime.now()).total_seconds()))
@@ -349,14 +358,14 @@ while True:
 ## 5. Doctor (app/doctor.py, C)
 
 ### Tools
-They are built per run inside `run_doctor` as closures over `conn`, `browser` and `site`, then wrapped with `create_sdk_mcp_server("doctor", tools=[...])`. All are annotated `ToolAnnotations(readOnlyHint=True)`, and `browse` also gets `maxResultSizeChars=20000`.
+They are built per run by `build_tools(conn, browser, site)` (called inside `run_doctor`) as closures over `conn`, `browser` and `site`, then wrapped with `create_sdk_mcp_server("doctor", tools=[...])`. All are annotated `ToolAnnotations(readOnlyHint=True)`, and `browse` also gets `maxResultSizeChars=20000`.
 
 | tool | input schema | behavior |
 |---|---|---|
-| `dns_tls_check` | `{"host": str}` | Runs via `asyncio.to_thread`, stdlib only, 5 s timeouts. Uses `urlsplit(h).hostname or h`. Steps: `getaddrinfo(host, 443)`, then TCP to the first IPv4, then TLS with SNI=host (default context), then TLS with SNI=`www.google.com` (`check_hostname=False`, `CERT_NONE`). |
-| `browse` | `{"url": str}` | Accepts only `http(s)://`. Runs `browser.fetch(url)`. |
-| `run_parser` | `{"base_url": str}` | Uses `site.boards` and the enabled programs. Fetches each board and parses it, then fetches one detail page: the first matched post, else the first post. |
-| `probe_domains` | `{}` | Takes candidates from `site.url` and checks `boards[0]` (see section 2). No writes. |
+| `dns_tls_check` | `{"host": str}` | Runs via `asyncio.to_thread`, stdlib only, 5 s timeouts. Host: `h = host.strip()`, then `urlsplit(h if "//" in h else "//" + h).hostname or h`, so a bare host or a full URL both work. Steps: `getaddrinfo(host, 443)`, then TCP to the first IPv4 (else the first address), then TLS with SNI=host (default context), then TLS with SNI=`www.google.com` (`check_hostname=False`, `CERT_NONE`). Facts only. |
+| `browse` | `{"url": str}` | SSRF guard `_public_http_url`: scheme http/https, a hostname that is not `localhost`, `*.internal`, `*.local` or an IP literal (also numeric/hex last label such as `2130706433`, `0x7f.1`); otherwise an `is_error` result `only public http(s):// URLs`. Runs `browser.fetch(url, timeout_ms=15000, retries=1)`. Caps: raw HTML `[:500_000]`, `title[:200]`, `final_url[:300]`. `_trim_html` runs in `asyncio.to_thread`: from `<body` on, script/style/svg/noscript/comments removed, every attribute but `href`/`title` removed, whitespace collapsed; sent `[:15000]`. |
+| `run_parser` | `{"base_url": str}` | Same SSRF guard on `base_url`. Uses `site.boards` and the enabled programs. Fetches each board and parses it, then fetches one detail page: the first matched post, else the first post. Titles are cut to 120 chars and URLs to 300. |
+| `probe_domains` | `{}` | Takes candidates from `site.url` and checks `boards[0]` with `timeout_ms=15000, retries=1` (see section 2). No writes. |
 
 Return text formats. Each is a single text content block; lines below are separated by `\n`.
 ```
@@ -373,7 +382,7 @@ final_url: https://...
 title: 예능·오락::토렌트썸-TORRENTSOME
 cloudflare_challenge: no           # yes if re.search(r"cf-chl|challenge-platform|turnstile|Just a moment", html, re.I)
 error: -                           # or net::ERR_CONNECTION_CLOSED
-html (15000 of 51382 chars, script/style/svg/noscript/comments removed, whitespace collapsed):
+html (15000 of 51382 chars, from <body, script/style/svg/noscript/comments and all attributes but href/title removed, whitespace collapsed):
 <...trimmed html, cap 15000 chars...>
 
 run_parser:
@@ -434,9 +443,12 @@ SCHEMA = {"type": "object", "required": ["verdict", "summary", "evidence", "sugg
 ```python
 async def run_doctor(conn, browser, report_id, site, model):
     emit = lambda s: db.append_doctor_progress(conn, report_id, f"{datetime.now():%H:%M:%S} {s}")
+    if LOCK.locked():          # busy check lives here, not in the route; no await before the acquire below
+        emit("다른 진단이 실행 중입니다"); db.finish_doctor_report(conn, report_id, "error", None, None, None); return
     async with LOCK:
         last = None
         try:
+            emit(f"start: {site['name']} {site['url']} model={model}")
             opts = ClaudeAgentOptions(model=model, max_turns=15, max_budget_usd=1.0, tools=[],
                 mcp_servers={"doctor": srv}, allowed_tools=[f"mcp__doctor__{n}" for n in NAMES],
                 permission_mode="dontAsk", strict_mcp_config=True, setting_sources=[],
@@ -447,22 +459,28 @@ async def run_doctor(conn, browser, report_id, site, model):
         except Exception as e: emit(f"exception: {e!r}")
         so = last.structured_output if last and not last.is_error else None
         cost = last.total_cost_usd if last else None
-        if so: db.finish_doctor_report(conn, report_id, "done", so["verdict"], json.dumps(so, ensure_ascii=False), cost)
+        if last: emit(f"result: {last.subtype}, turns {last.num_turns}, ${cost or 0:.3f}")
+        if isinstance(so, dict) and so.get("verdict"):
+               db.finish_doctor_report(conn, report_id, "done", so["verdict"], json.dumps(so, ensure_ascii=False), cost)
         else:  emit(f"no structured output ({last.subtype if last else 'no result'})")
                db.finish_doctor_report(conn, report_id, "error", None, None, cost)
 ```
+There is no extra last-resort try/except: everything after the `try` only writes the report row.
+
+Progress lines, each prefixed `HH:MM:SS`: `start: {name} {url} model={model}`, `tool: {name without mcp__doctor__} {json input[:80]}` (the `StructuredOutput` tool is not shown), `say: {text[:200]}`, `tool error: {content[:120]}`, `stopped: {subtype} {errors}`, `exception: {e!r}`, `result: {subtype}, turns {n}, ${cost:.3f}`, `no structured output ({subtype})`, and, with no timestamp, `interrupted by restart` appended by `db.connect` after a restart.
+
 Background tasks are kept in a module-level set: `_tasks: set[asyncio.Task]`, with `task.add_done_callback(_tasks.discard)`. Mark it `# ponytail:`.
 
 ### Routes (`router = APIRouter()`, own `Jinja2Templates(directory=Path(__file__).parent / "templates")`)
 
 | method path | form | action | response |
 |---|---|---|---|
-| POST `/sites/{id}/doctor` | `model` ∈ {sonnet, opus}, else 400 | 404 if no site. `rid = create_doctor_report`. If `LOCK.locked()`: append "다른 진단이 실행 중입니다" and `finish(rid, "error", None, None, None)`. Otherwise spawn `run_doctor`. | 303 `/doctor/{rid}` |
+| POST `/sites/{id}/doctor` | `model` ∈ `db.MODELS`, else 400 | 404 if no site. Only `rid = create_doctor_report` and spawn `run_doctor` as a task in `_tasks`; the busy check is inside `run_doctor`. | 303 `/doctor/{rid}` |
 | GET `/doctor/{id}` | | 404 if no report. Renders `doctor.html` with `report`, `site`, `data` (`json.loads(report_json)` or None). | 200 |
 | GET `/doctor/{id}/progress` | | Returns `<pre id="progress" hx-get="/doctor/{id}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{escaped progress}</pre>`, built inline with `html.escape`. When status ≠ running, the same `<pre>` comes back without `hx-*` attributes plus the header `HX-Refresh: true`, so the page reloads with the full report. | 200 |
-| POST `/doctor/{id}/apply` | | Only when status is done. Validates `url` with `^https?://[^/\s]+$` (after `rstrip("/")`) and each board with `^/\S*$`; bad values give 400. Calls `update_site(site_id, url=..., boards=...)` with the non-null parts only. | 303 `/sites` |
+| POST `/doctor/{id}/apply` | | Only when status is done and `report_json` is set, else 400. Null parts keep the current values: `db.clean_site_fields(fix.url or site.url, site.boards if fix.boards is None else fix.boards)`; `ValueError` gives 400. Then `update_site(site_id, url=..., boards=...)`. | 303 `/sites` |
 
-`doctor.html` extends `base.html`. It loads `<script src="https://unpkg.com/htmx.org@2.0.4"></script>` in `{% block head %}` and shows:
+`doctor.html` extends `base.html`. It loads `<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-…" crossorigin="anonymous">` (SRI) in `{% block head %}` and shows:
 - the verdict badge, model, cost (`%.3f`), and started time
 - the `<pre id=progress>`, polling only while running
 - the summary and the evidence `<ul>`
@@ -476,23 +494,25 @@ conn = db.connect(config.DB_PATH); browser = Browser(); await browser.start()
 sched = Scheduler(conn, browser); sched.start()
 app.state.db, app.state.browser, app.state.scheduler = conn, browser, sched
 yield
+for t in list(doctor._tasks): t.cancel()                      # doctor tasks first: they use the browser
+await asyncio.gather(*doctor._tasks, return_exceptions=True)
 await sched.stop(); await browser.stop(); conn.close()
 ```
-`app.include_router(doctor.router)`. `app.state` holds exactly `db`, `browser` and `scheduler`.
+`app.include_router(doctor.router)`. `app.state` holds exactly `db`, `browser` and `scheduler`. Every route, here and in `doctor.py`, is `async def`, so all `db.*` calls stay on the event-loop thread (sync routes would run in the threadpool).
 
 | method path | form fields | action | redirect |
 |---|---|---|---|
 | GET `/` | | `index.html` | |
 | POST `/run-now` | | `ok = sched.trigger_now()` | 303 `/` (`/?msg=already-running` if not ok) |
 | POST `/settings/interval` | `minutes: int = Form(ge=1, le=1440)` | `sched.set_interval` | 303 `/` |
-| POST `/settings/doctor-model` | `model` ∈ {sonnet, opus} | `set_setting("doctor_model")` | 303 `/sites` |
+| POST `/settings/doctor-model` | `model` ∈ `db.MODELS`, else 400 | `set_setting("doctor_model")` | 303 `/sites` |
 | GET `/programs` | `?error=` | `programs.html` | |
 | POST `/programs` | `name`, `resolution` ∈ {720p, 1080p, any} | `add_program`; ValueError gives `?error=<msg>` | 303 `/programs` |
 | POST `/programs/{id}/enabled` | `enabled` ("1"/"0") | `set_program_enabled` | 303 `/programs` |
 | POST `/programs/{id}/delete` | | `delete_program` | 303 `/programs` |
 | GET `/sites` | | `sites.html` | |
 | POST `/sites/{id}/enabled` | `enabled` ("1"/"0") | `update_site(enabled=)` | 303 `/sites` |
-| POST `/sites/{id}` | `url`, `boards` (one per line) | Same validation as apply; failure gives `?error=` | 303 `/sites` |
+| POST `/sites/{id}` | `url`, `boards` (one per line) | `db.clean_site_fields(url, boards.splitlines())`, which also rejects empty boards; `ValueError` gives `?error=<msg>` | 303 `/sites` |
 | GET `/runs/{id}` | | `run.html`, 404 if missing | |
 
 Templates and the context each receives (every template also gets `request`):
@@ -508,11 +528,14 @@ Templates and the context each receives (every template also gets `request`):
   - an edit form inside `<details>` (url input plus a boards `<textarea>`)
   - a doctor form (a `<select name=model>` preselected to `doctor_model`, POSTing to `/sites/{id}/doctor`)
   - the latest verdict badge linking to `/doctor/{id}`
-  - a doctor-model default form
+
+  Above the table, one doctor-model default form (POST `/settings/doctor-model`).
 - `run.html`: `run`, with the log in `<pre>`.
 - `doctor.html` (C): see section 5.
 
 ## 7. Tests
+
+All tests run offline on the fixtures in `tests/fixtures/`.
 
 `tests/test_crawler.py` (A):
 ```python
@@ -546,53 +569,73 @@ HASH = "4e4d86cbee91db107def6d3fd24271afd28130e2"
    - `https://example.com` gives `[]`.
 
 `tests/test_db.py` (A), using a `tmp_path / "app.db"` file:
-1. Calling `connect` twice and then counting gives 17 programs and 5 sites.
-2. Enabled programs are {놀면 뭐하니, 라디오스타} and enabled sites are 3.
-3. `interval_min == "60"` and `doctor_model == "sonnet"`. Boards come back as a `list`.
-4. Download rules:
-   - `add_download(HASH, p, "E348.261017", …)` returns True.
-   - The same hash again returns False.
-   - A new hash with the same `(p, ep)` returns False.
-   - `episode_exists` and `download_exists` are True.
-   - Two different hashes with `episode=None` both return True.
-5. Stale marking: after `create_run` and a reconnect, the run's status is `error`.
-6. `append_doctor_progress` twice gives 2 lines.
+1. `test_seed_and_rules`:
+   - Calling `connect` twice gives 17 programs and 5 sites; enabled programs are {놀면 뭐하니, 라디오스타}, enabled sites are 3.
+   - `interval_min == "60"`, `doctor_model == "sonnet"`, and site 1's boards come back as the list `["/v-4-16", "/v-2-13", "/v-4-17"]`.
+   - Download rules: `add_download(HASH, p, "E348.261017", …)` is True; the same hash again is False; a new hash with the same `(p, ep)` is False; `episode_exists` and `download_exists` are True; two different hashes with `episode=None` are both True; `list_downloads` carries `program_name`.
+2. `test_program_validation`: an empty name, resolution `480p` and the duplicate `라디오스타` each raise `ValueError`.
+3. `test_stale_marking_and_progress`: two `append_doctor_progress` calls give 2 lines. After a reconnect, the `running` run and doctor report are both `error`, and `latest_doctor_report_per_site` returns that report.
+4. `test_clean_site_fields`: `" https://x.com/ "` with `["/a", "", " /b "]` gives `("https://x.com", ["/a", "/b"])`. `https://x.com?`, `[]`, blank-only boards, a board with an embedded newline, a board without a leading `/`, and `ftp://` each raise `ValueError`.
 
-`tests/test_scheduler.py` (A, about 45 lines):
-- `FakeBrowser.fetch` reads a dict mapping url to a fixture path and returns `FetchResult(200, url, html, None)`; unknown URLs get `FetchResult(0, url, "", "net::ERR_NAME_NOT_RESOLVED")`. It records every URL it was asked for.
-- Setup: site 1 gets boards `["/v-4-16"]`, site 2 (zota) gets `["/t/4/16.html"]`, site 3 is disabled. Map both board URLs and both E348 detail URLs to their fixtures. The fake `add_magnet` appends to a list and returns `"added"`.
-- Run 1 (`asyncio.run(run_once(...))`): status `ok`, `added == 1`, exactly one add call with the btih magnet. Zota is skipped by the episode check.
-- Run 2: `added == 0`, no new add call, and no detail URL fetched.
+`tests/test_doctor.py` (C):
+1. `test_public_http_url_rejects[url]`, 7 cases: `http://127.0.0.1/`, `http://localhost:8080/`, `http://host.docker.internal/`, `http://2130706433/`, `http://0x7f.1/`, `file:///etc/passwd`, `http://[::1]/`.
+2. `test_public_http_url_accepts`: `https://torrentsome268.com/v-4-16` passes.
+3. `test_trim_html_keeps_posts`: the rj board after `_trim_html(...)[:15000]` (what `browse` sends) has no `<script`, is shorter than the raw HTML, and `parse_board` still finds at least 20 posts in it.
+
+`tests/test_scheduler.py` (A):
+- `FakeBrowser(script=None)` records every URL it is asked for. `script` maps a URL to a list of results returned in order (the last one repeats); an entry is a fixture path (served as `FetchResult(200, url, html, None)`) or a `FetchResult` such as `DOWN = FetchResult(0, "", "", "net::ERR_CONNECTION_CLOSED")`. Otherwise `PAGES` maps the some and zota board URLs and both E348 detail URLs to fixtures, and unknown URLs get `FetchResult(0, url, "", "net::ERR_NAME_NOT_RESOLVED")`.
+- `_moved_site` sets site 1 to `https://torrentsome266.com` with boards `["/v-4-16"]` (so 268 is the +2 candidate) and disables sites 2 and 3.
+1. `test_run_once_adds_once`: site 1 gets `["/v-4-16"]`, site 2 (zota) `["/t/4/16.html"]`, site 3 disabled; the fake `add_magnet` appends and returns `"added"`. Run 1: `ok`, `added == 1`, exactly one btih magnet, zota skipped by `skip: episode exists` without fetching its detail page. Run 2: `added == 0`, no new add call, no detail URL fetched.
+2. `test_domain_probe_moves_site`: the log has `domain moved https://torrentsome266.com -> https://torrentsome268.com`, `added == 1`, status `ok`, and the site URL is updated.
+3. `test_domain_probe_dry_run_changes_nothing`: the log has `would move … (dry-run)` and `dry-run: would add <HASH>`, status `ok`; the site URL and `last_ok_at` are unchanged.
+4. `test_domain_probe_original_recovers`: the original board answers `DOWN` first and the board fixture on the re-check, so the log has `/v-4-16 recovered, not moving`, no `domain moved`, and the URL stays.
+5. `test_transmission_unconfigured_is_partial`: with `TRANSMISSION_URL = ""` the real `add_magnet` raises (`ValueError` wrapped as `TransmissionError`), so the log has `transmission FAIL`, status is `partial`, and no download is recorded.
+6. `test_failed_later_board_is_partial`: site 1 boards `["/v-4-16", "/v-2-13"]` where the second is unknown: status `partial`, but `last_ok_at` is set.
+
+That is 22 test functions in 4 files; `uv run pytest -q` reports 56 passed with the parametrized cases.
 
 ## 8. Verification checklist (plan section 12)
 
-| step | command | expected |
-|---|---|---|
-| 2 | `uv run pytest -q` (Mac) | All pass, no network used. |
-| 2 | `docker compose run --rm scraper python -m app.scheduler --dry-run` | Lines `site 토렌트썸: /v-4-16 -> N posts` for 9 boards (3 sites × 3). A `match [놀면 뭐하니] ...E348...` line appears once with `dry-run: would add 4e4d…` (later sites say `skip: episode exists` only if a real add happened). Final `done: ... status=ok`. |
-| 3 | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` |
-| 3 | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:4e4d86cbee91db107def6d3fd24271afd28130e2'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. |
-| 3 | In the container (only after the user enables System Settings → Privacy & Security → Local Network → OrbStack and restarts OrbStack): `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94`. Until then, container runs log `transmission FAIL ...timed out`, end with status `partial`, and record no downloads, so the add is retried next run. |
-| 3 | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=1 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and a new run appears within about 60 s. Set it back to 60. |
-| 4 | Browser at http://127.0.0.1:8080 | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. |
-| 5 | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. |
-| 5 | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. |
-| 5 | Temporarily change `POST_RE` to `r'/nope$'`, `docker compose up -d --build`, run doctor on 토렌트좋다 | `parser_broken`. Revert and rebuild. |
-| 6 | `/programs` | 17 rows, 2 enabled. Legacy files deleted (constraints section 8), README rewritten, `data/` in `.gitignore`. |
+All steps were verified on 2026-10-18.
+
+| step | command | expected | verified |
+|---|---|---|---|
+| 2 | `uv run pytest -q` (Mac) | All pass, no network used. | 56 passed |
+| 2 | `docker compose run --rm scraper python -m app.scheduler --dry-run` | Lines `site 토렌트썸: /v-4-16 -> N posts` for 9 boards (3 sites × 3). A `match [놀면 뭐하니] ...` line with `dry-run: would add <hash>` (later sites say `skip: episode exists` only if a real add happened). Final `done: ... status=ok`. The run record is kept, so the next scheduled run moves back. | yes |
+| 3 | Mac host: `set -a; . ./.env; set +a; uv run python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94 (d8e60ee44f)` | yes |
+| 3 | Mac host: `... uv run python -c "from app import transmission as t; print(t.add_magnet('magnet:?xt=urn:btih:4e4d86cbee91db107def6d3fd24271afd28130e2'))"`, run twice | `added`, then `duplicate`. The torrent shows in the Pi Transmission web UI. | `duplicate` observed; a real `added` was not, because no new episode existed |
+| 3 | In the container: `docker compose exec scraper python -c "from app import transmission as t; print(t.rpc('session-get')['version'])"` | `2.94` | reachable; RPC round trip verified |
+| 3 | `curl -s -o /dev/null -w '%{http_code}' -X POST -d minutes=2 http://127.0.0.1:8080/settings/interval` | `303`. The dashboard's next-run time moves at once and runs follow at that interval. Set it back to 60. | runs observed 2 min apart |
+| 4 | Browser at http://127.0.0.1:8080 | Add a program, then [지금 실행]. A running run appears and finishes. `/runs/{id}` shows the log, downloads list the add, and toggle and delete work. | yes |
+| 5 | `/sites`, [doctor] on 토렌트썸 | Progress lines appear every 2 s. Verdict `ok`, cost below $1. | `ok`, $0.055, 5 turns |
+| 5 | Temporarily set 토렌트밤's URL to `https://torrenttop226.com` and run doctor | `blocked`. Restore the URL afterwards. | `blocked`, $0.028, 6 turns |
+| 5 | Temporarily point a site at a stale domain number and run doctor | `domain_moved`, `suggested_fix.url` = the `<- works` candidate | `domain_moved`, $0.013, 5 turns |
+| 5 | Temporarily change `POST_RE` to `r'/nope$'`, `docker compose up -d --build`, run doctor on 토렌트좋다 | `parser_broken`. Revert and rebuild. | verified by the implementer |
+| 5 | Double-click [doctor] | The second report ends `error` with `다른 진단이 실행 중입니다`. | yes |
+| 5 | `docker compose restart` while a doctor runs | The report row becomes `error` with `interrupted by restart`. | yes |
+| 6 | `/programs` | 17 rows, 2 enabled. Legacy files deleted (constraints section 8), README rewritten, `data/` in `.gitignore`. | yes |
+
+Troubleshooting: if the container cannot reach the Pi (macOS System Settings → Privacy & Security → Local Network → OrbStack is off; enable it and restart OrbStack), runs log `transmission FAIL ... timed out`, end `partial`, and record no downloads, so the add is retried next run.
 
 ## 9. Open decisions
 
 1. **`parse_board` returns sidebar links too** (42/37/49/50/30, not 20). The research says this is harmless and dedup handles it. Tests pin the exact counts, which also guards against regressions.
 2. **The scheduler caps waits at 60 s and re-checks the wall clock.** This fixes a correctness bug: the monotonic clock stops during Mac sleep, so "nothing special" would fire hours late.
 3. **`next_run_at` comes from the last run's `started` in the database.** Restarts don't crawl again; a first boot crawls immediately.
-4. **`add_magnet` returns `"added" | "duplicate"`, not `bool` as the constraints say.** The brief asked for this. A duplicate still inserts a downloads row so it is never retried.
+4. **`add_magnet` returns `"added" | "duplicate"` and raises `TransmissionError`.** The brief asked for this, and the constraints now say the same. A duplicate still inserts a downloads row so it is never retried.
 5. **`db` functions take `conn` explicitly instead of using a module global.** This keeps tests isolated and leaves `app.state` as the only global state. Calls are synchronous, for the reason in section 3.
-6. **A busy doctor creates an `error` report with a message** instead of disabling the button. No extra state is needed.
+6. **A busy doctor creates an `error` report with a message** instead of disabling the button. The check sits in `run_doctor` right before `async with LOCK` with no `await` between them (review fix for a race in the route), so the route only creates the report and spawns the task. A double click was verified to give a second `error` report.
 7. **Doctor completion uses the `HX-Refresh: true` header** instead of a second fragment template, so there is one template.
-8. **`dry_run` plus `python -m app.scheduler --dry-run`.** Step 2 needs it, and the container can't reach Transmission anyway.
+8. **`dry_run` plus `python -m app.scheduler --dry-run`.** Step 2 needs it. Without the flag the module does a real run.
 9. **After the first `TransmissionError` in a run, remaining adds are skipped.** This avoids N × 10 s timeouts. Status becomes `partial`.
 10. **A board with 0 posts counts as a failure, and the domain probe runs only on the first board's failure.** A 200 with no posts is the parser-broken or parked-domain signal.
 11. **Engine B boards are `/c/4/16`, `/c/2/13`, `/c/4/17`** (the research recommendation) instead of the plan's `/c/4`. The `/c/4/16` page has no fixture; the step-2 dry-run covers it.
-12. **The doctor prompt says that a failing real-SNI TLS check is normal.** The constraints' "TLS reset → blocked candidate" heuristic would label every working site blocked, because plain TLS is SNI-reset for all of them.
+12. **The doctor prompt says that a failing real-SNI TLS check is normal.** The constraints' original "TLS reset → blocked candidate" heuristic would label every working site blocked, because plain TLS is SNI-reset for all of them, and the fake-SNI comparison did not discriminate on Cloudflare-hosted sites. Reachability is judged by `browse`.
 13. **`ON DELETE SET NULL` with `foreign_keys=ON`.** Otherwise a reused program id would inherit a deleted program's episode history.
 14. **Episode `None` is stored as NULL**, so those posts are de-duplicated by hash only.
+15. **Confirm the original before moving.** A winning probe candidate is accepted only after one re-fetch of the original board (`retries=0`) still has no posts. Observed: ~20 s bursts of `ERR_CONNECTION_CLOSED`, and the sites keep many live numbered mirrors, so a transient error would otherwise move a healthy site.
+16. **Dry-run persists only the run record.** No Transmission add, `add_download`, domain move or `last_ok_at`.
+17. **A site is OK if any board worked.** It gets `last_ok_at`; a failed board only makes the run `partial`.
+18. **Site validation is shared in `db.py`** (`clean_site_fields`, `URL_RE`, `BOARD_RE`; `MODELS` for model forms), used by `POST /sites/{id}` and Doctor apply. Empty boards are rejected.
+19. **SSRF guard on `browse` and `run_parser`:** public http(s) hostnames only. `# ponytail:` literal-name check; a public name that resolves to a private IP, or a redirect, still gets through.
+20. **Probe candidates use `timeout_ms=15000, retries=1`** (scheduler and `probe_domains`), so five dead candidates don't cost 5 × 3 × 30 s.
