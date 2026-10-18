@@ -32,7 +32,7 @@ Environments. Both run in Docker on the Mac from the same image build and share 
 | data volume | `./data/dev:/data` | `./data/prod:/data` |
 | code | `./app:/app/app` bind mount, `uvicorn --reload --reload-dir app` | baked into the image |
 | restart | none | `unless-stopped` |
-| UI | `DEV · dry-run` badge in the nav, `[dev]` title prefix (`APP_ENV` is a Jinja global in both template environments) | — |
+| UI | `DEV · dry-run` badge in the nav, `[dev]` title prefix (`APP_ENV` is a global in the shared Jinja environment, `app/views.py`) | — |
 
 Ports come from `.env` via compose interpolation; the container always listens on 8080. `server.sh` prints the URL from `docker compose port scraper 8080`. Commands: `up` (`up -d --build`), `down`, `restart`, `reset` (down, delete `app.db` and its WAL/SHM, up; prod asks to type `prod`), `logs`, `ps`, `dry-run` (`run --rm scraper python -m app.scheduler --dry-run`).
 
@@ -487,7 +487,7 @@ Progress lines, each prefixed `HH:MM:SS`: `start: {name} {url} model={model}`, `
 
 Background tasks are kept in a module-level set: `_tasks: set[asyncio.Task]`, with `task.add_done_callback(_tasks.discard)`. Mark it `# ponytail:`.
 
-### Routes (`router = APIRouter()`, own `Jinja2Templates(directory=Path(__file__).parent / "templates")`)
+### Routes (`router = APIRouter()`, renders with the shared `app.views.templates`)
 
 | method path | form | action | response |
 |---|---|---|---|
@@ -535,14 +535,15 @@ Templates and the context each receives (every template also gets `request`):
 - `base.html`:
   - Blocks: `title`, `head`, `content`.
   - Nav: 대시보드 `/`, 프로그램 `/programs`, 사이트 `/sites`.
-  - Inline `<style>` of about 40 lines: `system-ui` font, `max-width: 960px`, table borders and padding, inline forms, and `.badge` classes `ok`/`done` green, `partial` amber, `error`/`blocked`/`site_down`/`cloudflare`/`parser_broken` red, `running` blue, `domain_moved` amber.
+  - Inline `<style>` of about 65 lines: `color-scheme: light dark` with `light-dark()` tokens (dark mode follows the OS), Korean system font stack, `max-width: 960px`, `.primary`/`.danger` buttons, and `.badge` classes `ok`/`done` green, `partial`/`domain_moved` amber, `error`/`blocked`/`site_down`/`cloudflare`/`parser_broken` red, `running` blue, `env` (DEV) purple.
+  - `app/views.py` holds the single `templates` environment used by `main.py` and `doctor.py`: the `LABEL` dict (Korean status labels; `_macros.html` `badge(s)` keeps the raw value as class and `title`), the `dt`/`ago`/`dur` filters, and `go()`.
   - No external assets.
 - `index.html`: `next_run_at`, `running`, `interval_min`, `msg`, `runs = list_runs(10)`, `downloads = list_downloads(20)`. Interval form uses `<input type=number min=1 max=1440 required>`.
 - `programs.html`: `programs`, `error`.
 - `sites.html`: `sites`, `reports = latest_doctor_report_per_site()`, `doctor_model`, `error`. Each row has:
   - a toggle form
   - an edit form inside `<details>` (url input plus a boards `<textarea>`)
-  - a doctor form (a `<select name=model>` preselected to `doctor_model`, POSTing to `/sites/{id}/doctor`)
+  - a [진단] form POSTing to `/sites/{id}/doctor` with no model field (the route falls back to `doctor_model`)
   - the latest verdict badge linking to `/doctor/{id}`
 
   Above the table, one doctor-model default form (POST `/settings/doctor-model`).
