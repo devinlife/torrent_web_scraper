@@ -8,6 +8,7 @@ if APP_ENV not in ("dev", "prod"):
 DRY_RUN: bool = APP_ENV != "prod"
 DATA_DIR: Path = Path(os.environ.get("DATA_DIR", "./data/dev"))
 DB_PATH: Path = DATA_DIR / "app.db"
-TRANSMISSION_URL: str = os.environ.get("TRANSMISSION_URL", "")
+# Base URL (http://host:port/transmission); RPC is {base}/rpc, web UI {base}/web/. A legacy .../rpc value still works.
+TRANSMISSION_URL: str = os.environ.get("TRANSMISSION_URL", "").rstrip("/").removesuffix("/rpc")
 TRANSMISSION_USER: str = os.environ.get("TRANSMISSION_USER", "")
 TRANSMISSION_PASSWORD: str = os.environ.get("TRANSMISSION_PASSWORD", "")

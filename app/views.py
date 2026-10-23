@@ -2,7 +2,7 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -69,7 +69,8 @@ HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 CSS_V = int((HERE / "static" / "app.css").stat().st_mtime)  # cache-buster; uvicorn --reload watches *.py only
 templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, FLASH=FLASH, CSS_V=CSS_V,
-                             RESOLUTIONS=RESOLUTIONS)
+                             RESOLUTIONS=RESOLUTIONS, TM_URL=config.TRANSMISSION_URL,
+                             TM_HOST=urlsplit(config.TRANSMISSION_URL).netloc, TM_USER=config.TRANSMISSION_USER)
 templates.env.filters.update(dt=dt, ago=ago, dur=dur, logmark=logmark)
 templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}  # readable confirm() text
 

@@ -26,7 +26,7 @@ Pi(Raspbian 10, armv7)에서는 최신 도구를 쓸 수 없다. 그래서 크�
 | 키 | 설명 |
 |---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Doctor용 Claude 인증. `ANTHROPIC_API_KEY`로 대신해도 된다(둘 중 하나). |
-| `TRANSMISSION_URL` | Pi RPC 주소. 예: `http://192.168.0.10:59090/transmission/rpc` |
+| `TRANSMISSION_URL` | Pi Transmission 기준 주소. 예: `http://192.168.0.10:59090/transmission`. RPC(`/rpc`)와 웹 UI(`/web/`)는 프로그램이 붙인다. 예전 `.../rpc` 형식도 동작한다. |
 | `TRANSMISSION_USER`, `TRANSMISSION_PASSWORD` | Transmission RPC 계정 |
 | `PROD_PORT`, `DEV_PORT` | 웹 UI 포트(127.0.0.1). 기본 8080, 8081 |
 

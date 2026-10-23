@@ -157,7 +157,7 @@ code, kbd, pre, samp { font-family: var(--mono); }
 .hero-foot { margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--border); }
 
 /* stat tiles */
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-4); }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-4); }
 .stat {
   position: relative; padding: var(--s-4);
   background: var(--surface); border: 1px solid var(--border);
@@ -174,7 +174,7 @@ code, kbd, pre, samp { font-family: var(--mono); }
   font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
 }
 .stat .value small { font-size: var(--fs-base); font-weight: 600; color: var(--text-2); margin-left: 2px; }
-.stat .hint { margin-top: var(--s-1); color: var(--text-3); font-size: var(--fs-sm); line-height: 18px; }
+.stat .hint { margin-top: var(--s-1); color: var(--text-3); font-size: var(--fs-sm); line-height: 18px; overflow-wrap: anywhere; }
 .stat.is-warn .value { color: var(--warn); }
 .stat.is-bad .value { color: var(--bad); }
 

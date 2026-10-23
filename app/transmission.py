@@ -21,7 +21,7 @@ def rpc(method: str, **arguments) -> dict:
     body = json.dumps({"method": method, "arguments": arguments}).encode()
     for _ in range(2):
         try:
-            req = urllib.request.Request(config.TRANSMISSION_URL, data=body, headers={
+            req = urllib.request.Request(f"{config.TRANSMISSION_URL}/rpc", data=body, headers={
                 "Authorization": f"Basic {auth}", "Content-Type": "application/json",
                 "X-Transmission-Session-Id": _sid})
             with urllib.request.urlopen(req, timeout=10) as r:
