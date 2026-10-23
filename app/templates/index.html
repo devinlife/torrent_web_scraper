@@ -4,7 +4,7 @@
 {% block head %}<meta http-equiv="refresh" content="{{ 10 if running else 60 }}; url=/">{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>대시보드</h1><p class="sub">{{ interval_min }}분마다 자동으로 확인합니다</p></div>
+  <div><h1>대시보드</h1><p class="sub">{{ interval_min }}분마다 자동으로 확인합니다{% if TM_URL %} · Transmission {{ TM_HOST }}{% if TM_USER %}({{ TM_USER }}){% endif %}{% endif %}</p></div>
   <div class="actions"><form method="post" action="/run-now"><button class="btn btn-primary"><span aria-hidden="true">▶</span> 지금 실행</button></form></div>
 </div>
 {{ flash(msg=msg, n=interval_min) }}
@@ -58,10 +58,6 @@
   <div class="stat"><dt><a href="/programs">프로그램</a></dt>
     <dd class="value">{{ programs|selectattr("enabled")|list|length }}<small>켜짐</small></dd>
     <dd class="hint">전체 {{ programs|length }}</dd></div>
-  <div class="stat {{ 'is-bad' if not TM_URL }}"><dt>{% if TM_URL %}<a href="{{ TM_URL }}/web/" target="_blank" rel="noopener">Transmission ↗</a>{% else %}Transmission{% endif %}</dt>
-    {% if TM_URL %}<dd class="value">{{ "드라이런" if APP_ENV == "dev" else "실제 추가" }}</dd>
-    <dd class="hint">{{ TM_HOST }}{% if TM_USER %} · {{ TM_USER }}{% endif %}</dd><dd class="hint">RPC {{ TM_URL }}/rpc</dd>
-    {% else %}<dd class="value">-</dd><dd class="hint">TRANSMISSION_URL 미설정</dd>{% endif %}</div>
 </dl>
 
 <section class="card section">

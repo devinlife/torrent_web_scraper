@@ -15,7 +15,8 @@
 {% set p = request.url.path %}{% set cur = none if code is defined else "/sites" if p.startswith(("/sites", "/doctor")) else "/programs" if p.startswith("/programs") else "/" %}
 <header class="topbar"><div class="wrap">
   <a class="brand" href="/">torrent</a>
-  <nav class="nav" aria-label="주 메뉴">{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}</nav>
+  <nav class="nav" aria-label="주 메뉴">{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}
+    {%- if TM_URL %}<a href="{{ TM_URL }}/web/" target="_blank" rel="noopener" title="{{ TM_HOST }}">Transmission ↗</a>{% endif %}</nav>
   {% if APP_ENV == "dev" %}<span class="badge env">DEV</span>{% endif %}
 </div></header>
 {% if APP_ENV == "dev" %}<div class="envbar"><div class="wrap">DEV · dry-run — Transmission 추가, 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다</div></div>{% endif %}
