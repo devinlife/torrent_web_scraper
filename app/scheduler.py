@@ -136,6 +136,11 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
         logging.exception("run failed")
         L(f"exception: {e!r}")
         status = "error"
+    if not dry_run:  # dry-run persists nothing but the run record
+        try:
+            L(f"pruned {db.prune_downloads(conn)} downloads older than {db.RETENTION_DAYS} days")
+        except Exception as e:
+            L(f"prune FAIL {e!r}")
     L(f"done: matched={matched} added={added} status={status}")
     db.finish_run(conn, rid, status, matched, added, "\n".join(log))
     return rid

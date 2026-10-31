@@ -2,7 +2,7 @@
 import json
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 PROGRAMS_DDL = """
@@ -234,6 +234,14 @@ def add_download(conn, info_hash: str, program_id: int, episode: str | None, tit
         return True
     except sqlite3.IntegrityError:
         return False
+
+
+RETENTION_DAYS = 30
+
+
+def prune_downloads(conn, days: int = RETENTION_DAYS) -> int:
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
+    return conn.execute("DELETE FROM downloads WHERE added_at < ?", (cutoff,)).rowcount
 
 
 def list_downloads(conn, limit: int = 50) -> list[dict]:

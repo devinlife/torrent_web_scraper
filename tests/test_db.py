@@ -101,3 +101,15 @@ def test_clean_site_fields():
                         ("https://x.com", ["/a\n/b"]), ("https://x.com", ["a"]), ("ftp://x.com", ["/a"])]:
         with pytest.raises(ValueError):
             db.clean_site_fields(url, boards)
+
+
+def test_prune_downloads(tmp_path):
+    from datetime import datetime, timedelta
+    conn = db.connect(tmp_path / "app.db")
+    pid = db.add_program(conn, "x", ["any"])
+    for h, days in (("old", 31), ("new", 29)):
+        db.add_download(conn, h, pid, h, h, "s")
+        conn.execute("UPDATE downloads SET added_at=? WHERE info_hash=?",
+                     ((datetime.now() - timedelta(days=days)).isoformat(timespec="seconds"), h))
+    assert db.prune_downloads(conn) == 1
+    assert [d["info_hash"] for d in db.list_downloads(conn)] == ["new"]
