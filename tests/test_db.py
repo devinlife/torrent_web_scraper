@@ -113,3 +113,14 @@ def test_prune_downloads(tmp_path):
                      ((datetime.now() - timedelta(days=days)).isoformat(timespec="seconds"), h))
     assert db.prune_downloads(conn) == 1
     assert [d["info_hash"] for d in db.list_downloads(conn)] == ["new"]
+
+
+def test_url_changes(tmp_path):
+    conn = db.connect(tmp_path / "app.db")
+    db.add_url_change(conn, 1, "https://a1.com", "https://a2.com", "domain_probe")
+    db.add_url_change(conn, 1, "https://a2.com", "https://a3.com", "redirect")
+    db.add_url_change(conn, 2, "https://b1.com", "https://b2.com", "redirect")
+    assert [c["new_url"] for c in db.list_url_changes(conn, 1)] == ["https://a3.com", "https://a2.com"]
+    assert len(db.list_url_changes(conn)) == 3 and len(db.list_url_changes(conn, limit=1)) == 1
+    conn.execute("DELETE FROM sites WHERE id=1")
+    assert [c["site_id"] for c in db.list_url_changes(conn)] == [2]

@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS doctor_reports(
   started TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'running',
   model TEXT NOT NULL, verdict TEXT, report_json TEXT, cost_usd REAL,
   progress TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS site_url_changes(
+  id INTEGER PRIMARY KEY, site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  old_url TEXT NOT NULL, new_url TEXT NOT NULL, reason TEXT NOT NULL, changed_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS site_url_changes_site ON site_url_changes(site_id, id);
 CREATE INDEX IF NOT EXISTS downloads_added_at ON downloads(added_at);
 CREATE INDEX IF NOT EXISTS doctor_reports_site ON doctor_reports(site_id, id);
 """
@@ -173,6 +177,17 @@ def update_site(conn, id: int, *, url: str | None = None, boards: list[str] | No
     if fields:
         sets = ", ".join(f"{k}=?" for k in fields)
         conn.execute(f"UPDATE sites SET {sets} WHERE id=?", (*fields.values(), id))
+
+
+def add_url_change(conn, site_id: int, old: str, new: str, reason: str) -> None:
+    conn.execute("INSERT INTO site_url_changes(site_id, old_url, new_url, reason, changed_at) VALUES (?, ?, ?, ?, ?)",
+                 (site_id, old, new, reason, now()))
+
+
+def list_url_changes(conn, site_id: int | None = None, limit: int = 100) -> list[dict]:
+    """Newest first; all sites unless site_id is given."""
+    where, args = ("WHERE site_id=? ", (site_id,)) if site_id else ("", ())
+    return _all(conn, f"SELECT * FROM site_url_changes {where}ORDER BY id DESC LIMIT ?", *args, limit)
 
 
 def clean_site_fields(url: str, boards: list[str]) -> tuple[str, list[str]]:
