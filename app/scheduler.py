@@ -25,11 +25,12 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
     def L(msg: str) -> None:
         log.append(f"{datetime.now():%H:%M:%S} {msg}")
 
-    def move(site, old: str, new: str) -> str:  # dry-run persists nothing but the run record
+    def move(site, old: str, new: str, reason: str) -> str:  # dry-run persists nothing but the run record
         if dry_run:
             L(f"site {site['name']}: would move {old} -> {new} (dry-run)")
         else:
             db.update_site(conn, site["id"], url=new)
+            db.add_url_change(conn, site["id"], old, new, reason)
             L(f"site {site['name']}: domain moved {old} -> {new}")
         return new
 
@@ -62,7 +63,7 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                                     L(f"site {name}: {board} recovered, not moving")
                                     r, posts = r0, p0
                                 else:
-                                    base = move(site, base, cand)
+                                    base = move(site, base, cand, "domain_probe")
                                 break
                         else:
                             L(f"site {name}: probe failed")
@@ -73,7 +74,7 @@ async def run_once(conn, browser, *, add_magnet=transmission.add_magnet, dry_run
                         site_ok = False
                         continue
                     if i == 0 and (origin := "{0.scheme}://{0.netloc}".format(urlsplit(r.final_url))) != base:
-                        base = move(site, base, origin)  # followed a redirect to a new domain
+                        base = move(site, base, origin, "redirect")  # followed a redirect to a new domain
                     site_any = True
                     for n in range(2, site["pages"] + 1):  # all seeded sites page with ?page=N
                         rn = await browser.fetch(f"{base}{board}{'&' if '?' in board else '?'}page={n}")

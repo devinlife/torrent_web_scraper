@@ -72,6 +72,19 @@ def test_domain_probe_moves_site(tmp_path):
     assert "domain moved https://torrentsome266.com -> https://torrentsome268.com" in run["log"]
     assert run["added"] == 1 and run["status"] == "ok", run["log"]
     assert db.get_site(conn, 1)["url"] == "https://torrentsome268.com"
+    [c] = db.list_url_changes(conn)
+    assert (c["site_id"], c["old_url"], c["new_url"], c["reason"]) == (
+        1, "https://torrentsome266.com", "https://torrentsome268.com", "domain_probe")
+
+
+def test_redirect_records_change(tmp_path):
+    conn = _moved_site(tmp_path)
+    old = "https://torrentsome266.com/v-4-16"
+    b = FakeBrowser({old: [FetchResult(200, "https://torrentsome268.com/v-4-16",
+                                       (FIX / "torrentsome/board.html").read_text(encoding="utf-8"), None)]})
+    asyncio.run(run_once(conn, b, add_magnet=lambda m: "added"))
+    [c] = db.list_url_changes(conn)
+    assert (c["new_url"], c["reason"]) == ("https://torrentsome268.com", "redirect")
 
 
 def test_domain_probe_dry_run_changes_nothing(tmp_path):
@@ -81,6 +94,7 @@ def test_domain_probe_dry_run_changes_nothing(tmp_path):
     assert "dry-run: would add " + HASH in run["log"] and run["status"] == "ok"
     assert db.get_site(conn, 1)["url"] == "https://torrentsome266.com"
     assert not db.get_site(conn, 1)["last_ok_at"]
+    assert db.list_url_changes(conn) == []
 
 
 def test_domain_probe_original_recovers(tmp_path):
@@ -90,6 +104,7 @@ def test_domain_probe_original_recovers(tmp_path):
     assert "/v-4-16 recovered, not moving" in run["log"], run["log"]
     assert "domain moved" not in run["log"]
     assert db.get_site(conn, 1)["url"] == "https://torrentsome266.com"
+    assert db.list_url_changes(conn) == []
 
 
 def test_transmission_unconfigured_is_partial(tmp_path, monkeypatch):
