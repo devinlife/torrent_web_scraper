@@ -184,10 +184,14 @@ def add_url_change(conn, site_id: int, old: str, new: str, reason: str) -> None:
                  (site_id, old, new, reason, now()))
 
 
-def list_url_changes(conn, site_id: int | None = None, limit: int = 100) -> list[dict]:
-    """Newest first; all sites unless site_id is given."""
+def list_url_changes(conn, site_id: int | None = None, limit: int = 100, per_site: int | None = None) -> list[dict]:
+    """Newest first; all sites unless site_id is given. per_site keeps only each site's newest N rows;
+    every row carries `total`, that site's full count."""
     where, args = ("WHERE site_id=? ", (site_id,)) if site_id else ("", ())
-    return _all(conn, f"SELECT * FROM site_url_changes {where}ORDER BY id DESC LIMIT ?", *args, limit)
+    return _all(conn, "SELECT * FROM (SELECT *, COUNT(*) OVER (PARTITION BY site_id) AS total, "
+                      "ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY id DESC) AS rn "
+                      f"FROM site_url_changes {where}) WHERE rn <= ? ORDER BY id DESC LIMIT ?",
+                *args, per_site or 2**31, limit)
 
 
 def clean_site_fields(url: str, boards: list[str]) -> tuple[str, list[str]]:

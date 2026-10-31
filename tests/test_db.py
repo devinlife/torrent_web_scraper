@@ -124,3 +124,14 @@ def test_url_changes(tmp_path):
     assert len(db.list_url_changes(conn)) == 3 and len(db.list_url_changes(conn, limit=1)) == 1
     conn.execute("DELETE FROM sites WHERE id=1")
     assert [c["site_id"] for c in db.list_url_changes(conn)] == [2]
+
+
+def test_url_changes_per_site_cap(tmp_path):
+    conn = db.connect(tmp_path / "app.db")
+    for n in range(7):  # site 1 is old and noisy, site 2 is newer
+        db.add_url_change(conn, 1, f"https://a{n}.com", f"https://a{n + 1}.com", "redirect")
+    db.add_url_change(conn, 2, "https://b1.com", "https://b2.com", "redirect")
+    rows = db.list_url_changes(conn, limit=-1, per_site=5)
+    s1 = [r for r in rows if r["site_id"] == 1]
+    assert len(s1) == 5 and s1[0]["new_url"] == "https://a7.com" and {r["total"] for r in s1} == {7}
+    assert [r["site_id"] for r in rows if r["site_id"] == 2] == [2]

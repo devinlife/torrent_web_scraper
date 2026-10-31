@@ -50,8 +50,8 @@
   </div>
   <div class="site-foot">
     {% if ch %}<details class="url-changes">
-      <summary>URL 자동 변경 {{ ch|length }}건</summary>
-      <ul>{% for c in ch[:5] %}
+      <summary>URL 자동 변경 {{ ch[0].total }}건</summary>
+      <ul>{% for c in ch %}
         <li>{{ c.changed_at|dt }} · {{ c.old_url.split("//")[-1] }} → {{ c.new_url.split("//")[-1] }} · {{ LABEL.get(c.reason, c.reason) }}</li>{% endfor %}
       </ul>
     </details>{% endif %}
