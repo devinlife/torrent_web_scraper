@@ -13,7 +13,8 @@ from app.db import RESOLUTIONS
 
 LABEL = {"ok": "정상", "partial": "일부 실패", "error": "실패", "running": "실행 중", "done": "완료",
          "domain_moved": "도메인 이전", "blocked": "차단", "site_down": "사이트 다운", "transient": "일시 장애",
-         "cloudflare": "CF 인증 필요", "parser_broken": "파서 고장"}
+         "cloudflare": "CF 인증 필요", "parser_broken": "파서 고장", "auto_changed": "자동 변경됨",
+         "domain_probe": "도메인 탐색", "redirect": "리다이렉트"}
 # ?msg= flash texts: (flash-<kind>, text); {n} is filled by the page (e.g. interval minutes).
 FLASH = {"started": ("info", "실행을 시작했습니다. 끝나면 결과가 여기에 나옵니다."),
          "already-running": ("info", "이미 실행 중입니다."),

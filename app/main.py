@@ -148,7 +148,11 @@ async def program_delete(request: Request, id: int):
 @app.get("/sites")
 async def sites(request: Request, error: str | None = None, msg: str | None = None):
     conn = request.app.state.db
-    return page(request, "sites.html", sites=db.list_sites(conn), reports=db.latest_doctor_report_per_site(conn),
+    changes: dict[int, list[dict]] = {}
+    for c in db.list_url_changes(conn, limit=1000):  # newest first; ponytail: older than 1000 changes are not counted
+        changes.setdefault(c["site_id"], []).append(c)
+    recent = (datetime.now() - timedelta(days=7)).isoformat(timespec="seconds")
+    return page(request, "sites.html", sites=db.list_sites(conn), changes=changes, recent=recent, reports=db.latest_doctor_report_per_site(conn),
                 stale_before=stale_before(conn), interval_min=db.get_setting(conn, "interval_min", "60"),
                 doctor_model=db.get_setting(conn, "doctor_model", "sonnet"), error=error, msg=msg)
 

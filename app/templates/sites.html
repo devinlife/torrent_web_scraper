@@ -18,10 +18,12 @@
 {% for s in sites %}{% set r = reports.get(s.id) %}
 {% set stale = s.enabled and APP_ENV != "dev" and (s.last_ok_at or "") < stale_before %}
 {% set busy = r and r.status == "running" %}
+{% set ch = changes.get(s.id, []) %}
 <section class="card site{{ ' is-warn' if stale }}{{ ' off' if not s.enabled }}" aria-labelledby="site-{{ s.id }}">
   <div class="site-row">
     <div class="site-id">
       <h2 id="site-{{ s.id }}">{{ s.name }}</h2>
+      {% if ch and ch[0].changed_at >= recent %}{{ badge("auto_changed") }} {% endif %}
       <a class="site-url" href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.url.split("//")[-1] }} <span aria-hidden="true">↗</span><span class="sr-only">(새 탭)</span></a>
     </div>
     <dl class="site-facts">
@@ -47,6 +49,12 @@
     </div>
   </div>
   <div class="site-foot">
+    {% if ch %}<details class="url-changes">
+      <summary>URL 자동 변경 {{ ch|length }}건</summary>
+      <ul>{% for c in ch[:5] %}
+        <li>{{ c.changed_at|dt }} · {{ c.old_url.split("//")[-1] }} → {{ c.new_url.split("//")[-1] }} · {{ LABEL.get(c.reason, c.reason) }}</li>{% endfor %}
+      </ul>
+    </details>{% endif %}
     <details class="editor">
       <summary class="btn btn-ghost" aria-label="{{ s.name }} 설정 수정"></summary>
       <form class="editor-body" method="post" action="/sites/{{ s.id }}">

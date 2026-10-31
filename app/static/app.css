@@ -434,3 +434,5 @@ fieldset.field > legend { padding: 0; margin-bottom: 6px; color: var(--text-2); 
   .diff th[scope="row"], .diff td { display: block; height: auto; padding: 2px 0; border: 0; width: auto; }
   .diff td::before { content: attr(data-label); display: block; color: var(--text-3); font: 600 var(--fs-xs)/16px var(--font); }
 }
+.url-changes { margin-bottom: var(--s-2); font-size: 13px; }
+.url-changes ul { margin: var(--s-2) 0 0; padding-left: var(--s-4); }

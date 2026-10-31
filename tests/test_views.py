@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app.views import ago, dt, dur, logmark
+from app.views import ago, dt, dur, logmark, templates
 
 NOW = datetime(2026, 10, 18, 20, 0, 0)
 
@@ -40,3 +40,23 @@ def test_logmark():
                    'done: status=ok')
     assert logmark(None) == ""
     assert "<mark" not in logmark("FAILED_X errors")  # whole words only
+
+
+def test_sites_page_url_changes(tmp_path):
+    import asyncio
+    from types import SimpleNamespace
+    from unittest import mock
+
+    from app import db
+    from app.main import sites
+
+    conn = db.connect(tmp_path / "app.db")
+    db.add_url_change(conn, 1, "https://a1.com", "https://a2.com", "domain_probe")
+    req = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=conn)))
+    with mock.patch("app.main.page", lambda req, tpl, **ctx: ctx):
+        ctx = asyncio.run(sites(req))
+    assert [c["new_url"] for c in ctx["changes"][1]] == ["https://a2.com"] and 2 not in ctx["changes"]
+    assert ctx["changes"][1][0]["changed_at"] >= ctx["recent"]
+    html = templates.get_template("sites.html").render(request=SimpleNamespace(url=SimpleNamespace(path="/sites")), **ctx)
+    assert html.count("URL 자동 변경 1건") == 1 and "a1.com → a2.com · 도메인 탐색" in html
+    assert "자동 변경됨" in html
