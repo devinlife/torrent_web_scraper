@@ -1,73 +1,67 @@
 {% extends "base.html" %}
-{% from "_macros.html" import tag, flash %}
+{% from "_macros.html" import box, flash, tag %}
 {% block title %}사이트{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div><h1>사이트</h1><p class="sub">켜진 {{ sites|selectattr("enabled")|list|length }}곳 · 최근 성공이 {{ 3 * interval_min|int }}분 넘게 없으면 경고합니다</p></div>
-  <div class="actions"><form class="form-row keep" method="post" action="/settings/doctor-model">
-    <label class="label-inline" for="model">진단 모델</label>
-    <select class="select" id="model" name="model">{% for m in ["sonnet", "opus"] %}
+<div class="hd">
+  <h1>사이트</h1><span>켜진 {{ sites|selectattr("enabled")|list|length }}곳</span><span class="dim">최근 성공이 {{ 3 * interval_min|int }}분 넘게 없으면 경고합니다</span>
+  <form class="rt" method="post" action="/settings/doctor-model">
+    <label class="lb" for="model">진단 모델</label>
+    <select class="in" id="model" name="model">{% for m in ["sonnet", "opus"] %}
       <option value="{{ m }}" {{ "selected" if m == doctor_model }}>{{ m }}</option>{% endfor %}
     </select>
-    <button class="btn btn-secondary">저장</button>
-  </form></div>
+    <button class="btn">저장</button>
+  </form>
 </div>
 {{ flash(error=error, msg=msg) }}
 
-<div class="site-grid">
+<div class="sites">
 {% for s in sites %}{% set r = reports.get(s.id) %}
 {% set stale = s.enabled and APP_ENV != "dev" and (s.last_ok_at or "") < stale_before %}
 {% set busy = r and r.status == "running" %}
 {% set ch = changes.get(s.id, []) %}
-<section class="card site{{ ' is-warn' if stale }}{{ ' off' if not s.enabled }}" aria-labelledby="site-{{ s.id }}">
-  <div class="site-row">
-    <div class="site-id">
-      <h2 id="site-{{ s.id }}">{{ s.name }}</h2>
-      {% if ch and ch[0].changed_at >= recent %}{{ tag("auto_changed") }} {% endif %}
-      <a class="site-url" href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.url.split("//")[-1] }} <span aria-hidden="true">↗</span><span class="sr-only">(새 탭)</span></a>
-    </div>
-    <dl class="site-facts">
-      <div><dt>최근 성공</dt><dd>
-        {%- if stale %}{{ tag("stale") }} {% endif %}
-        {%- if s.last_ok_at %}{{ s.last_ok_at|dt }} <span class="muted">· {{ s.last_ok_at|ago }}</span>
-        {%- elif APP_ENV == "dev" %}<span class="muted">dev는 기록하지 않음</span>
-        {%- else %}<span class="muted">성공 기록 없음</span>{% endif %}</dd></div>
-      <div><dt>최근 진단</dt><dd>
-        {%- if busy %}{{ tag("running", "진단 중") }} <a href="/doctor/{{ r.id }}">진행 보기 →</a>
-        {%- elif r %}{{ tag(r.verdict or r.status) }} <a href="/doctor/{{ r.id }}">{{ r.started|ago }} →</a>
-        {%- else %}<span class="muted">진단 기록 없음</span>{% endif %}</dd></div>
-    </dl>
-    <div class="site-ctrl">
-      <form class="switch-wrap" method="post" action="/sites/{{ s.id }}/enabled">
-        <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
-        <button class="switch" role="switch" aria-checked="{{ 'true' if s.enabled else 'false' }}" aria-label="{{ s.name }} 사용"></button>
-        <span aria-hidden="true">{{ "켜짐" if s.enabled else "꺼짐" }}</span>
-      </form>
-      <form class="site-doctor" method="post" action="/sites/{{ s.id }}/doctor">
-        <button class="btn {{ 'btn-primary' if stale else 'btn-secondary' }}" title="{{ doctor_model }}으로 진단"{% if busy %} disabled{% endif %}>진단 · 최대 $1</button>
-      </form>
-    </div>
-  </div>
-  <div class="site-foot">
-    {% if ch %}<details class="url-changes">
+{% call box(s.name, "warn" if stale else "off" if not s.enabled) %}
+  <dl class="kv">
+    <div><dt>URL</dt><dd><a href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.url.split("//")[-1] }} <span aria-hidden="true">↗</span><span class="sr-only">(새 탭)</span></a>
+      {%- if ch and ch[0].changed_at >= recent %} {{ tag("auto_changed") }}{% endif %}</dd></div>
+    <div><dt>최근 성공</dt><dd>
+      {%- if stale %}{{ tag("stale") }} {% endif %}
+      {%- if s.last_ok_at %}{{ s.last_ok_at|dt }} <span class="dim">· {{ s.last_ok_at|ago }}</span>
+      {%- elif APP_ENV == "dev" %}<span class="dim">dev는 기록하지 않음</span>
+      {%- else %}<span class="dim">성공 기록 없음</span>{% endif %}</dd></div>
+    <div><dt>최근 진단</dt><dd>
+      {%- if busy %}{{ tag("running", "진단 중") }} <a href="/doctor/{{ r.id }}">진행 보기</a>
+      {%- elif r %}{{ tag(r.verdict or r.status) }} <a href="/doctor/{{ r.id }}">{{ r.started|ago }}</a>
+      {%- else %}<span class="dim">진단 기록 없음</span>{% endif %}</dd></div>
+    {% if ch %}<div><dt>변경 이력</dt><dd><details class="fold">
       <summary>URL 자동 변경 {{ ch[0].total }}건</summary>
-      <ul>{% for c in ch %}
+      <ul class="list">{% for c in ch %}
         <li>{{ c.changed_at|dt }} · {{ c.old_url.split("//")[-1] }} → {{ c.new_url.split("//")[-1] }} · {{ LABEL.get(c.reason, c.reason) }}</li>{% endfor %}
       </ul>
-    </details>{% endif %}
-    <details class="editor">
-      <summary class="btn btn-ghost" aria-label="{{ s.name }} 설정 수정"></summary>
-      <form class="editor-body" method="post" action="/sites/{{ s.id }}">
-        <label class="field"><span>URL</span><input class="input" type="url" name="url" value="{{ s.url }}" required></label>
-        <label class="field"><span>게시판 경로 (한 줄에 하나)</span>
-          <textarea class="textarea" name="boards" rows="{{ s.boards|length + 1 }}">{{ s.boards|join("\n") }}</textarea></label>
-        <label class="field"><span>읽을 페이지 수 (게시판마다 1~N쪽)</span>
-          <input class="input" type="number" name="pages" value="{{ s.pages }}" min="1" max="10" required></label>
-        <div class="form-actions"><button class="btn btn-primary">저장</button></div>
+    </details></dd></div>{% endif %}
+  </dl>
+  <div class="acts">
+    <form method="post" action="/sites/{{ s.id }}/enabled">
+      <input type="hidden" name="enabled" value="{{ 0 if s.enabled else 1 }}">
+      <button class="chk" role="switch" aria-checked="{{ 'true' if s.enabled else 'false' }}" aria-label="{{ s.name }} 사용">사용</button>
+    </form>
+    <form method="post" action="/sites/{{ s.id }}/doctor">
+      <button class="btn{{ ' ya' if stale }}" title="{{ doctor_model }}으로 진단"{% if busy %} disabled{% endif %}>진단 · 최대 $1</button>
+    </form>
+    <details class="edit">
+      <summary aria-label="{{ s.name }} 설정 수정"></summary>
+      <form class="form" method="post" action="/sites/{{ s.id }}">
+        <div class="fl"><label class="lb" for="url-{{ s.id }}">URL</label>
+          <input class="in grow" id="url-{{ s.id }}" type="url" name="url" value="{{ s.url }}" required></div>
+        <div class="fl"><label class="lb" for="boards-{{ s.id }}">게시판 <span class="dim">한 줄에 하나</span></label>
+          <textarea class="in grow" id="boards-{{ s.id }}" name="boards" rows="{{ s.boards|length + 1 }}">{{ s.boards|join("\n") }}</textarea></div>
+        <div class="fl"><label class="lb" for="pages-{{ s.id }}">페이지</label>
+          <input class="in" id="pages-{{ s.id }}" type="number" name="pages" value="{{ s.pages }}" min="1" max="10" required>
+          <span class="dim">게시판마다 1~N쪽</span></div>
+        <div class="fl"><button class="btn rev">저장</button></div>
       </form>
     </details>
   </div>
-</section>
+{% endcall %}
 {% endfor %}
 </div>
 {% endblock %}

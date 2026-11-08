@@ -183,7 +183,7 @@
 | `.site-facts` 최근 성공 / 최근 진단 | 같은 `dl.kv`의 `최근 성공`(`tag` warn `응답 없음` + 시각 + `.dim` 상대 시각), `최근 진단`(`tag(verdict)` + 링크, 진단 중이면 `tag("running", "진단 중")`) 행 |
 | `details.url-changes` | `dl.kv` `변경 이력` 행 안 `details.fold`: summary `URL 자동 변경 8건`, 펼치면 `ul.list` 줄 `11-08 09:00 · x6.com → x7.com · 리다이렉트`. 두 문구 형식은 테스트가 고정하므로 바꾸지 않는다 |
 | `.site-ctrl` 스위치 + 진단 버튼 | 상자 맨 아래 `.acts` 한 줄(`1ch` 간격): `.chk` 사용 · `[ 진단 · 최대 $1 ]`(응답 없음이면 `.btn.ya`, 진단 중이면 `disabled`) · 수정 |
-| `details.editor` | `details.edit` summary `[ 수정 ]`/`[ 닫기 ]`. 본문 `.form`: `.fl` URL(`input.in[type=url]`) · 게시판(`textarea.in`, `.lb` 아래 `.dim` `한 줄에 하나`) · 페이지 수(`input.in[type=number]`) · `[ 저장 ]` `.btn.rev` |
+| `details.editor` | `details.edit` summary `[ 수정 ]`/`[ 닫기 ]`. 본문 `.form`: `.fl` URL(`input.in[type=url]`) · 게시판(`textarea.in`, `.lb` 아래 `.dim` `한 줄에 하나`) · 페이지(`input.in[type=number]`, 뒤에 `.dim` `게시판마다 1~N쪽`. `페이지 수`는 `.lb` 8ch를 넘어 줄이 바뀌므로 줄였다) · `[ 저장 ]` `.btn.rev` |
 
 ### 3.5 실행 상세 `run.html`
 

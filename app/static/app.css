@@ -106,6 +106,9 @@ html:not(.kbd) :is(.keys > span:has(kbd), .it[data-g] .k) { display: none; } /* 
 }
 .bt::before { content: "╡ "; content: "╡ " / ""; }
 .bt::after { content: " ╞"; content: " ╞" / ""; }
+.box.bad { border-color: var(--r); }
+.box.warn { border-color: var(--y); }
+.box.off, .box.off :is(.bt, a, dd, .btn, .chk) { color: var(--dim); } /* not opacity: keeps 4.5:1 */
 .box > * + * + * { margin-top: 8px; } /* first child is the absolutely placed .bt */
 
 /* buttons: [ label ] */
@@ -141,6 +144,10 @@ form.inline { display: inline; }
 .fl { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 1ch; }
 .lb { flex: none; width: 8ch; color: var(--dim); }
 .fl > .grow { flex: 1 1 30ch; }
+.hd .lb { width: auto; }
+.acts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 1ch; }
+.acts > details[open] { flex-basis: 100%; }
+.acts > details > .form { margin-top: 8px; }
 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 legend.lb { float: left; padding: 0; margin-right: 1ch; }
 .in {
@@ -420,6 +427,9 @@ fieldset.field > legend { padding: 0; margin-bottom: 6px; color: var(--text-2); 
 .stats dt { color: var(--dim); }
 .stats dt a { color: inherit; }
 .stats dt a::after { content: ""; position: absolute; inset: 0; }
+
+/* sites: one box per site */
+.sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 60ch), 1fr)); gap: 30px 2ch; }
 
 /* ---------- utilities ---------- */
 .hi { color: var(--hi); }
