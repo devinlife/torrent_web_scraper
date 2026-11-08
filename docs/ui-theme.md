@@ -137,7 +137,7 @@
 | `.topbar` + `.brand` "torrent" | `header.title`: `.logo` "TORRENT"(VT323, `/` 링크) · `─ {% block crumb %}{{ self.title() }}{% endblock %}` · `.rt`에 Transmission 호스트(`TM_HOST`), dev 표시, 렌더 시각(`now|dt`) |
 | `.badge.env` "DEV" | `.title .rt` 안 `<span class="env">DEV</span>`: 노랑 바탕 검정 글자(반전 위 반전) |
 | `.envbar` dry-run 안내 | 제목 줄 바로 아래 한 줄 `<p class="envline y">[dev] dry-run — …</p>`, 아래 `1px --line`. 문구는 그대로 |
-| `nav.nav` 가로 링크 | `.row` 왼쪽 `nav.box.side`(`aria-label="주 메뉴"`, 제목 `이동`): `.it` 셋(`g d` 대시보드, `g p` 프로그램, `g s` 사이트 + 응답 없는 사이트 수 `.cn`), `.sep` "외부", `.it` Transmission(`.k`에 `↗`, 새 탭). `cur` 계산과 `aria-current`는 지금 로직 그대로 |
+| `nav.nav` 가로 링크 | `.row` 왼쪽 `nav.box.side`(`aria-label="주 메뉴"`, 제목 `이동`은 `h2`가 아니라 `<span class="bt" aria-hidden="true">`. 이름은 `aria-label`이 준다): `.it` 셋(`g d` 대시보드, `g p` 프로그램, `g s` 사이트 + 응답 없는 사이트 수 `.cn`), `.sep` "외부", `.it` Transmission(`.k`에 `↗`, 새 탭). `cur` 계산과 `aria-current`는 지금 로직 그대로 |
 | `main.main.wrap` | `main.main`(`.row` 오른쪽 단, 자식 사이 `30px`) |
 | 없음 | `footer.keys`: `g d` `g p` `g s` 키 캡, `.rt`에 상태 줄(`[>>] 실행 중` 또는 `다음 실행 11:20`, 응답 없는 사이트가 있으면 `.y` `사이트 경고 1`) |
 | 없음 | `<head>` 안 인라인 단축키 스크립트(5장 1번) |

@@ -4,24 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% if APP_ENV == "dev" %}[dev] {% endif %}{% block title %}torrent{% endblock %} · torrent</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="stylesheet" crossorigin="anonymous"
-      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
-      integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@400;700&family=VT323&display=swap">
 <link rel="stylesheet" href="/static/app.css?v={{ CSS_V }}">
 {% block head %}{% endblock %}
 </head>
 <body>
 {% set p = request.url.path %}{% set cur = none if code is defined else "/sites" if p.startswith(("/sites", "/doctor")) else "/programs" if p.startswith("/programs") else "/" %}
-<header class="topbar"><div class="wrap">
-  <a class="brand" href="/">torrent</a>
-  <nav class="nav" aria-label="주 메뉴">{% for href, name in [("/", "대시보드"), ("/programs", "프로그램"), ("/sites", "사이트")] %}<a href="{{ href }}"{% if href == cur %} aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}
-    {%- if TM_URL %}<a href="{{ TM_URL }}/web/" target="_blank" rel="noopener" title="{{ TM_HOST }}">Transmission ↗</a>{% endif %}</nav>
-  {% if APP_ENV == "dev" %}<span class="badge env">DEV</span>{% endif %}
-</div></header>
-{% if APP_ENV == "dev" %}<div class="envbar"><div class="wrap">DEV · dry-run — Transmission 추가, 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다</div></div>{% endif %}
-<main class="main wrap">
+{% set menu = [("/", "d", "대시보드"), ("/programs", "p", "프로그램"), ("/sites", "s", "사이트")] %}
+<header class="title"><a class="logo" href="/">TORRENT</a><span>─ {% block crumb %}{{ self.title() }}{% endblock %}</span>
+  <span class="rt">{% if TM_HOST %}{{ TM_HOST }}{% endif %}{% if APP_ENV == "dev" %} <span class="env">DEV</span>{% endif %}</span></header>
+{% if APP_ENV == "dev" %}<p class="envline y">[dev] dry-run — Transmission 추가, 다운로드 기록, URL 변경, 최근 성공 갱신을 하지 않습니다</p>{% endif %}
+<div class="row">
+<nav class="box side" aria-label="주 메뉴"><span class="bt" aria-hidden="true">이동</span>
+  {%- for href, key, name in menu %}
+  <a class="it" href="{{ href }}" data-g="{{ key }}"{% if href == cur %} aria-current="page"{% endif %}><span class="k">g {{ key }}</span><span class="n">{{ name }}</span></a>
+  {%- endfor %}
+  {%- if TM_URL %}
+  <div class="sep">외부</div>
+  <a class="it" href="{{ TM_URL }}/web/" target="_blank" rel="noopener" title="{{ TM_HOST }}"><span class="k" aria-hidden="true">↗</span><span class="n">Transmission</span></a>
+  {%- endif %}
+</nav>
+<main class="main">
 {% block content %}{% endblock %}
 </main>
+</div>
+<footer class="keys">{% for href, key, name in menu %}<span><kbd>g {{ key }}</kbd>{{ name }}</span>{% endfor %}</footer>
 </body>
 </html>
