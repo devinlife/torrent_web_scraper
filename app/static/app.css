@@ -91,8 +91,9 @@ kbd { background: var(--inv); color: var(--bg); padding: 0 .5ch; }
 .keys { display: flex; flex-wrap: wrap; gap: 4px 2ch; padding: 4px 1ch; border-top: 1px solid var(--line); }
 .keys kbd { margin-right: .5ch; }
 .keys .rt { margin-left: auto; }
+html:not(.kbd) :is(.keys > span:has(kbd), .it[data-g] .k) { display: none; } /* set by the shortcut script */
 @media (hover: none) {
-  .keys > span:has(kbd), .it .k { display: none; }
+  .keys > span:has(kbd), .it[data-g] .k { display: none; }
 }
 
 /* ---------- components ---------- */

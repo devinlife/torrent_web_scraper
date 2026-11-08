@@ -66,13 +66,32 @@ def stale_before(conn) -> str:
     return stale.isoformat(timespec="seconds")
 
 
+def stale_sites(conn, sites) -> list:
+    """Enabled sites with no success since stale_before(); none in dev, which never records success."""
+    cut = stale_before(conn)
+    return [] if config.APP_ENV == "dev" else [s for s in sites if (s["last_ok_at"] or "") < cut]
+
+
+def shell(request: Request) -> dict:
+    """Menu count, footer status line and clock for base.html; {} before startup (templates cope without it)."""
+    conn = getattr(request.app.state, "db", None)
+    if conn is None:
+        return {}
+    sched = request.app.state.scheduler
+    return {"shell": {"stale": len(stale_sites(conn, db.list_sites(conn, enabled_only=True))),
+                      "running": sched.running, "next_run_at": sched.next_run_at, "now": datetime.now()}}
+
+
+templates.context_processors.append(shell)
+
+
 # dashboard
 @app.get("/")
 async def index(request: Request, msg: str | None = None):
     conn, sched = request.app.state.db, request.app.state.scheduler
     nxt, now = sched.next_run_at, datetime.now()
-    sites, cut = db.list_sites(conn, enabled_only=True), stale_before(conn)
-    stale = [] if config.APP_ENV == "dev" else [s for s in sites if (s["last_ok_at"] or "") < cut]  # dev never sets it
+    sites = db.list_sites(conn, enabled_only=True)
+    stale = stale_sites(conn, sites)
     return page(request, "index.html", next_run_at=nxt, running=sched.running or msg == "started",
                 due=bool(nxt and nxt <= now), interval_min=db.get_setting(conn, "interval_min", "60"), msg=msg,
                 runs=db.list_runs(conn, 10), downloads=db.list_downloads(conn, 20),
