@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge, flash %}
+{% from "_macros.html" import tag, flash %}
 {% block title %}사이트{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -23,18 +23,18 @@
   <div class="site-row">
     <div class="site-id">
       <h2 id="site-{{ s.id }}">{{ s.name }}</h2>
-      {% if ch and ch[0].changed_at >= recent %}{{ badge("auto_changed") }} {% endif %}
+      {% if ch and ch[0].changed_at >= recent %}{{ tag("auto_changed") }} {% endif %}
       <a class="site-url" href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.url.split("//")[-1] }} <span aria-hidden="true">↗</span><span class="sr-only">(새 탭)</span></a>
     </div>
     <dl class="site-facts">
       <div><dt>최근 성공</dt><dd>
-        {%- if stale %}<span class="badge warn" title="주기의 3배 넘게 성공 없음"><i></i>응답 없음</span> {% endif %}
+        {%- if stale %}{{ tag("stale") }} {% endif %}
         {%- if s.last_ok_at %}{{ s.last_ok_at|dt }} <span class="muted">· {{ s.last_ok_at|ago }}</span>
         {%- elif APP_ENV == "dev" %}<span class="muted">dev는 기록하지 않음</span>
         {%- else %}<span class="muted">성공 기록 없음</span>{% endif %}</dd></div>
       <div><dt>최근 진단</dt><dd>
-        {%- if busy %}<span class="badge running"><i></i>진단 중</span> <a href="/doctor/{{ r.id }}">진행 보기 →</a>
-        {%- elif r %}{{ badge(r.verdict or r.status) }} <a href="/doctor/{{ r.id }}">{{ r.started|ago }} →</a>
+        {%- if busy %}{{ tag("running", "진단 중") }} <a href="/doctor/{{ r.id }}">진행 보기 →</a>
+        {%- elif r %}{{ tag(r.verdict or r.status) }} <a href="/doctor/{{ r.id }}">{{ r.started|ago }} →</a>
         {%- else %}<span class="muted">진단 기록 없음</span>{% endif %}</dd></div>
     </dl>
     <div class="site-ctrl">

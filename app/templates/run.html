@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge %}
+{% from "_macros.html" import tag %}
 {% block title %}실행 #{{ run.id }}{% endblock %}
 {% block content %}
 <a class="back" href="/">← 대시보드</a>
 <div class="page-head">
-  <div><h1 class="title-row">실행 #{{ run.id }} {{ badge(run.status) }}</h1>
+  <div><h1 class="title-row">실행 #{{ run.id }} {{ tag(run.status) }}</h1>
     <p class="sub">{{ run.started|dt }} 시작 · {{ run.started|dur(run.finished) }} · 매칭 {{ run.matched }} · 추가 {{ run.added }}</p></div>
 </div>
 {% if "interrupted by restart" in run.log %}<div class="flash flash-info" role="status"><span>서버가 다시 시작되어 중단된 실행입니다. 사이트 문제가 아닙니다.</span></div>

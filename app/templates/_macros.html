@@ -1,6 +1,11 @@
-{% macro badge(s) %}<span class="badge {{ s }}" title="{{ s }}"><i></i>{{ LABEL.get(s, s) }}</span>{% endmacro %}
+{% set SYM = {"ok": ("[ok]", "g"), "bad": ("[!!]", "r"), "run": ("[>>]", "c"), "warn": ("[??]", "y"), "none": ("[--]", "dim")} %}
+{% macro sym(tone) %}{% set m, c = SYM[tone] %}<span class="{{ c }}" aria-hidden="true">{{ m }}</span>{% endmacro %}
+{% macro tag(s, text=none, tone=none) %}{% set m, c = SYM[tone or TONE.get(s, "none")] %}<span class="tag {{ c }}" title="{{ s }}"><span aria-hidden="true">{{ m }}</span> {{ text or LABEL.get(s, s) }}</span>{% endmacro %}
+{% macro box(title, tone=none, el="section") %}<{{ el }} class="box{{ ' ' ~ tone if tone }}"{{ kwargs|xmlattr }}><h2 class="bt">{{ title }}</h2>
+{{ caller() }}</{{ el }}>{% endmacro %}
+{% macro empty(title, hint=none) %}<p class="empty dim">{{ title }}.{% if hint %} {{ hint }}{% endif %}</p>{% endmacro %}
 {% macro flash(error=none, msg=none, n=none) %}
-{%- if error %}<div class="flash flash-bad" role="status">{{ error }}</div>{% endif %}
-{%- if msg in FLASH %}{% set kind, text = FLASH[msg] %}<div class="flash flash-{{ kind }}" role="status"><span>{{ text.format(n=n) }}</span>
-  {%- if msg == "applied" %}<form method="post" action="/run-now"><button class="btn btn-secondary btn-sm">지금 실행</button></form>{% endif %}</div>{% endif %}
+{%- if error %}<div class="msg" role="status">{{ sym("bad") }} {{ error }}</div>{% endif %}
+{%- if msg in FLASH %}{% set kind, text = FLASH[msg] %}<div class="msg" role="status">{{ sym(kind) }} {{ text.format(n=n) }}
+  {%- if msg == "applied" %} <form method="post" action="/run-now"><button class="btn">지금 실행</button></form>{% endif %}</div>{% endif %}
 {%- endmacro %}

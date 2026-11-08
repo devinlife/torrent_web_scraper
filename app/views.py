@@ -14,10 +14,14 @@ from app.db import RESOLUTIONS
 LABEL = {"ok": "정상", "partial": "일부 실패", "error": "실패", "running": "실행 중", "done": "완료",
          "domain_moved": "도메인 이전", "blocked": "차단", "site_down": "사이트 다운", "transient": "일시 장애",
          "cloudflare": "CF 인증 필요", "parser_broken": "파서 고장", "auto_changed": "자동 변경됨",
-         "domain_probe": "도메인 탐색", "redirect": "리다이렉트"}
-# ?msg= flash texts: (flash-<kind>, text); {n} is filled by the page (e.g. interval minutes).
-FLASH = {"started": ("info", "실행을 시작했습니다. 끝나면 결과가 여기에 나옵니다."),
-         "already-running": ("info", "이미 실행 중입니다."),
+         "domain_probe": "도메인 탐색", "redirect": "리다이렉트", "stale": "응답 없음"}
+# status key -> tone (ok/bad/run/warn; anything else is "none"); the tag macro picks symbol + color from it.
+TONE = {"ok": "ok", "done": "ok", "running": "run",
+        **dict.fromkeys(("error", "blocked", "site_down", "cloudflare", "parser_broken"), "bad"),
+        **dict.fromkeys(("partial", "domain_moved", "transient", "stale"), "warn")}
+# ?msg= flash texts: (tone, text); {n} is filled by the page (e.g. interval minutes).
+FLASH = {"started": ("run", "실행을 시작했습니다. 끝나면 결과가 여기에 나옵니다."),
+         "already-running": ("run", "이미 실행 중입니다."),
          "interval": ("ok", "주기를 {n}분으로 바꿨습니다."),
          "added": ("ok", "프로그램을 추가했습니다. 맨 아래, 가장 나중 순서에 들어갑니다."),
          "resolution": ("ok", "해상도를 바꿨습니다."),
@@ -69,7 +73,7 @@ def logmark(text: str | None) -> Markup:
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 CSS_V = int((HERE / "static" / "app.css").stat().st_mtime)  # cache-buster; uvicorn --reload watches *.py only
-templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, FLASH=FLASH, CSS_V=CSS_V,
+templates.env.globals.update(APP_ENV=config.APP_ENV, LABEL=LABEL, TONE=TONE, FLASH=FLASH, CSS_V=CSS_V,
                              RESOLUTIONS=RESOLUTIONS, TM_URL=config.TRANSMISSION_URL,
                              TM_HOST=urlsplit(config.TRANSMISSION_URL).netloc, TM_USER=config.TRANSMISSION_USER)
 templates.env.filters.update(dt=dt, ago=ago, dur=dur, logmark=logmark)

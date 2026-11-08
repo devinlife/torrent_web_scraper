@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge, flash %}
+{% from "_macros.html" import tag, flash %}
 {% block title %}대시보드{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="{{ 10 if running else 60 }}; url=/">{% endblock %}
 {% block content %}
@@ -66,7 +66,7 @@
     <thead><tr><th class="num">#</th><th>시작</th><th class="hide-sm">소요</th><th>상태</th><th class="num hide-sm">매칭</th><th class="num">추가</th></tr></thead>
     <tbody>{% for r in runs %}
     <tr><td class="num"><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.started|dt }}</td>
-      <td class="hide-sm">{{ r.started|dur(r.finished) }}</td><td>{{ badge(r.status) }}</td>
+      <td class="hide-sm">{{ r.started|dur(r.finished) }}</td><td>{{ tag(r.status) }}</td>
       <td class="num hide-sm">{{ r.matched }}</td><td class="num{{ ' pos' if r.added }}">{{ r.added }}</td></tr>
     {% endfor %}</tbody>
   </table></div>

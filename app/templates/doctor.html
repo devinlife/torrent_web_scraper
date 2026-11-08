@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge %}
+{% from "_macros.html" import tag %}
 {% block title %}진단 · {{ report.site_name }}{% endblock %}
 {% block head %}{% if report.status == "running" %}<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>{% endif %}{% endblock %}
 {% block content %}
