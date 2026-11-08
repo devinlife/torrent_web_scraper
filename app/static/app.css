@@ -140,6 +140,7 @@ form.inline { display: inline; }
 .form { display: flex; flex-direction: column; gap: 8px; }
 .fl { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 1ch; }
 .lb { flex: none; width: 8ch; color: var(--dim); }
+.fl > .grow { flex: 1 1 30ch; }
 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 legend.lb { float: left; padding: 0; margin-right: 1ch; }
 .in {
@@ -161,7 +162,7 @@ select.in { appearance: none; -webkit-appearance: none; }
 .grid .num { text-align: right; }
 .grid .end { width: 1%; text-align: right; }
 .grid tr.cur, .grid tbody tr:not(.grp):hover, .grid tbody tr:not(.grp):focus-within { background: var(--raise); }
-.grid tr.off, .grid tr.off a { color: var(--dim); }
+.grid tr.off, .grid tr.off :is(a, .btn) { color: var(--dim); }
 .grid .cut { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; }
 .grid .grp th { padding-top: 8px; color: var(--dim); background: linear-gradient(var(--line), var(--line)) 0 19px / 100% 1px no-repeat; }
 .grid .grp th > span { padding-right: 1ch; background: var(--bg); }
