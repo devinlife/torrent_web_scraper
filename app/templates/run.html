@@ -1,18 +1,19 @@
 {% extends "base.html" %}
-{% from "_macros.html" import tag %}
+{% from "_macros.html" import box, empty, sym, tag %}
 {% block title %}실행 #{{ run.id }}{% endblock %}
+{% block crumb %}<a href="/">대시보드</a> / 실행 #{{ run.id }}{% endblock %}
 {% block content %}
-<a class="back" href="/">← 대시보드</a>
-<div class="page-head">
-  <div><h1 class="title-row">실행 #{{ run.id }} {{ tag(run.status) }}</h1>
-    <p class="sub">{{ run.started|dt }} 시작 · {{ run.started|dur(run.finished) }} · 매칭 {{ run.matched }} · 추가 {{ run.added }}</p></div>
+<div class="hd">
+  <h1 class="big">#{{ run.id }}</h1>{{ tag(run.status) }}
+  <span>{{ run.started|dt }} 시작</span><span class="dim">·</span><span>{{ run.started|dur(run.finished) }}</span>
+  <span class="dim">·</span><span>매칭 {{ run.matched }} · 추가 {{ run.added }}</span>
 </div>
-{% if "interrupted by restart" in run.log %}<div class="flash flash-info" role="status"><span>서버가 다시 시작되어 중단된 실행입니다. 사이트 문제가 아닙니다.</span></div>
-{% elif run.status in ("error", "partial") %}<div class="flash flash-bad" role="status"><span>실패한 사이트가 있습니다.</span><a href="/sites">사이트 확인 →</a></div>{% endif %}
+{% if "interrupted by restart" in run.log %}<div class="msg" role="status">{{ sym("none") }} 서버가 다시 시작되어 중단된 실행입니다. 사이트 문제가 아닙니다.</div>
+{% elif run.status in ("error", "partial") %}<div class="msg" role="status">{{ sym("bad") }} 실패한 사이트가 있습니다. <a href="/sites">사이트 확인</a></div>{% endif %}
 {% set log = run.log.strip() %}{% set lines = log.splitlines()|length %}
-<section class="card">
-  <header class="card-head"><h2>로그</h2><span class="muted num">{{ "{:,}".format(lines) }}줄</span></header>
+{# 추가 작업: 로그를 .ln 격자(시각/내용)로. logmark와 doctor_progress 조각을 함께 바꿀 것 #}
+{% call box("로그 · " ~ "{:,}".format(lines) ~ "줄") %}
   {% if lines %}<pre class="log">{{ log|logmark }}</pre>
-  {% else %}<div class="empty"><p class="empty-title">로그가 없습니다</p><p class="muted">{{ "아직 실행 중입니다." if run.status == "running" else "기록된 줄이 없습니다." }}</p></div>{% endif %}
-</section>
+  {% else %}{{ empty("로그가 없습니다", "아직 실행 중입니다." if run.status == "running" else "기록된 줄이 없습니다.") }}{% endif %}
+{% endcall %}
 {% endblock %}

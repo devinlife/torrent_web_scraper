@@ -1,74 +1,68 @@
 {% extends "base.html" %}
-{% from "_macros.html" import tag %}
+{% from "_macros.html" import box, sym %}
 {% block title %}진단 · {{ report.site_name }}{% endblock %}
+{% block crumb %}<a href="/sites">사이트</a> / 진단 · {{ report.site_name }}{% endblock %}
 {% block head %}{% if report.status == "running" %}<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>{% endif %}{% endblock %}
 {% block content %}
 {% set running = report.status == "running" %}
-<a class="back" href="/sites">← 사이트</a>
-<div class="page-head">
-  <div><h1>진단 · {{ report.site_name }}</h1>
-    <p class="sub">{{ report.model }} · 시작 {{ report.started|dt }} ({{ report.started|ago }}) ·
-      {% if running %}진행 중 · 상한 $1{% else %}비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }}{% endif %}</p></div>
+<div class="hd">
+  <h1>진단 · {{ report.site_name }}</h1><span>{{ report.model }}</span><span class="dim">·</span>
+  <span>시작 {{ report.started|dt }} <span class="dim">({{ report.started|ago }})</span></span><span class="dim">·</span>
+  <span>{% if running %}진행 중 · 상한 $1{% else %}비용 {{ "$%.3f"|format(report.cost_usd) if report.cost_usd is not none else "-" }}{% endif %}</span>
 </div>
 
-{% if running %}{% set tone, title = "is-run", "진단 중입니다 · 상한 $1" %}
-{% elif data %}{% set tone, title = {"ok": "is-ok", "domain_moved": "is-warn", "transient": "is-warn"}.get(data.verdict, "is-bad"), LABEL.get(data.verdict, data.verdict) %}
-{% else %}{% set tone, title = "is-bad", "진단을 끝내지 못했습니다" %}{% endif %}
-<section class="card hero {{ tone }}" aria-label="진단 결과">
-  <p class="hero-title"><i></i>{{ title }}</p>
-  <p class="hero-text">{% if running %}보통 1–3분 걸립니다. 끝나면 이 화면이 결과로 바뀝니다.
+{% if running %}{% set tone, title = "run", "진단 중입니다 · 상한 $1" %}
+{% elif data %}{% set tone, title = TONE.get(data.verdict, "bad"), LABEL.get(data.verdict, data.verdict) %}
+{% else %}{% set tone, title = "bad", "진단을 끝내지 못했습니다" %}{% endif %}
+{% call box("결과", tone if tone in ("bad", "warn"), style="max-width: 96ch") %}
+  <p>{{ sym(tone) }} <strong class="hi">{{ title }}</strong></p>
+  <p class="hi">{% if running %}보통 1–3분 걸립니다. 끝나면 이 화면이 결과로 바뀝니다.
     {%- elif data %}{{ data.summary }}{% else %}구조화된 결과가 없습니다. 아래 진행 로그를 확인하세요.{% endif %}</p>
-</section>
+{% endcall %}
 
+{% macro diff(old, new) %}
+  {%- if new != old %}{% for v in old %}<span class="sr-only">현재: </span><span class="r" aria-hidden="true">- </span>{{ v }}<br>{% endfor %}
+  {%- for v in new %}<span class="sr-only">제안: </span><span class="g" aria-hidden="true">+ </span>{{ v }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+  {%- else %}{{ old|join("<br>"|safe) }} <span class="dim">같음</span>{% endif %}
+{%- endmacro %}
 {% if data and site %}
 {% set fix = data.suggested_fix or {} %}
 {% if fix.url or fix.boards %}
-{% set new_url, new_boards = fix.url or site.url, fix.boards or site.boards %}
-<section class="card">
-  <header class="card-head"><h2>수정 제안</h2></header>
-  <div class="table-wrap"><table class="table diff">
-    <thead><tr><th><span class="sr-only">항목</span></th><th>현재</th><th>제안</th></tr></thead>
-    <tbody>
-    <tr><th scope="row">URL</th><td data-label="현재">{{ site.url }}</td>
-      {% if new_url != site.url %}<td class="changed" data-label="제안">{{ new_url }}<span class="sr-only"> (변경)</span></td>{% else %}<td class="muted" data-label="제안">같음</td>{% endif %}</tr>
-    <tr><th scope="row">게시판</th><td data-label="현재">{{ site.boards|join("\n") }}</td>
-      {% if new_boards != site.boards %}<td class="changed" data-label="제안">{{ new_boards|join("\n") }}<span class="sr-only"> (변경)</span></td>{% else %}<td class="muted" data-label="제안">같음</td>{% endif %}</tr>
-    </tbody>
-  </table></div>
-  <form class="card-foot" method="post" action="/doctor/{{ report.id }}/apply"
+{% call box("수정 제안") %}
+  <dl class="kv">
+    <div><dt>URL</dt><dd>{{ diff([site.url], [fix.url or site.url]) }}</dd></div>
+    <div><dt>게시판</dt><dd>{{ diff(site.boards, fix.boards or site.boards) }}</dd></div>
+  </dl>
+  <form method="post" action="/doctor/{{ report.id }}/apply"
         onsubmit='return confirm({{ (report.site_name ~ " 설정을 제안대로 바꿀까요?")|tojson }})'>
-    <button class="btn btn-primary">이 설정으로 변경</button>
+    <button class="btn rev">이 설정으로 변경</button>
   </form>
-</section>
+{% endcall %}
 {% else %}
-<section class="card">
-  <header class="card-head"><h2>현재 설정</h2><span class="muted">수정 제안 없음</span></header>
-  <div class="table-wrap"><table class="table diff">
-    <tbody>
-    <tr><th scope="row">URL</th><td>{{ site.url }}</td></tr>
-    <tr><th scope="row">게시판</th><td>{{ site.boards|join("\n") }}</td></tr>
-    </tbody>
-  </table></div>
-</section>
+{% call box("현재 설정") %}
+  <p class="dim">수정 제안 없음</p>
+  <dl class="kv">
+    <div><dt>URL</dt><dd>{{ site.url }}</dd></div>
+    <div><dt>게시판</dt><dd>{{ site.boards|join("<br>"|safe) }}</dd></div>
+  </dl>
+{% endcall %}
 {% endif %}
 {% endif %}
 
 {% if data and data.evidence %}
-<section class="card">
-  <header class="card-head"><h2>근거</h2></header>
-  <ul class="card-body list">{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
-</section>
+{% call box("근거") %}
+  <ul class="list">{% for e in data.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+{% endcall %}
 {% endif %}
 
 {% set n = report.progress.strip().splitlines()|length %}
 {% if running %}
-<section class="card">
-  <header class="card-head"><h2>진행 로그</h2><span class="muted">2초마다 새로 고침</span></header>
+{% call box("진행 로그 · 2초마다 새로 고침") %}
   <pre id="progress" class="log" hx-get="/doctor/{{ report.id }}/progress" hx-trigger="every 2s" hx-swap="outerHTML">{{ report.progress|logmark }}</pre>
-</section>
+{% endcall %}
 {% else %}
-<details class="card fold"{% if not data %} open{% endif %}>
-  <summary class="card-head"><h2>진행 로그</h2><span class="muted num">{{ n }}줄</span></summary>
+<details class="box fold"{% if not data %} open{% endif %}>
+  <summary class="bt">진행 로그 · {{ n }}줄</summary>
   <pre id="progress" class="log">{{ report.progress|logmark }}</pre>
 </details>
 {% endif %}

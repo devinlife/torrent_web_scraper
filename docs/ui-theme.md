@@ -22,7 +22,7 @@
 | base | 요소 선택자(`body`, `a`, `h1`, `button`, `input`, `:focus-visible`, `kbd`, `pre`) | 클래스 없이 읽혀도 TTY로 보이게 한다 |
 | shell | 제목 줄, 본문 두 단(`.row`, `.side`, `.main`), dev 줄, 바닥 키 줄 | `base.html`에만 나오는 것 |
 | components | 2장의 컴포넌트 | 클래스 이름은 역할로 짓는다. 화면 이름을 넣지 않는다 |
-| pages | 한 화면에만 쓰는 배치(`.stats`, `.sites`, `.diff`) | 최소한으로 둔다. 같은 모양이 두 화면에 나오면 components로 올린다 |
+| pages | 한 화면에만 쓰는 배치(`.stats`, `.sites`) | 최소한으로 둔다. 같은 모양이 두 화면에 나오면 components로 올린다 |
 | utilities | `.hi` `.dim` `.y` `.r` `.c` `.g` `.sr-only` | 맨 끝에 둔다 |
 
 다크 한 벌만 둔다. `color-scheme: dark`이고 `prefers-color-scheme` 분기는 없다.
@@ -203,19 +203,19 @@
 | htmx `<script>`(진행 중일 때만) | 그대로 |
 | `.back` `← 사이트` | crumb `<a href="/sites">사이트</a> / 진단 · 토렌트썸` |
 | `.page-head` | `.hd`: `h1` `진단 · 이름`(굵게, 14px) · 모델 · 시작 시각(상대) · 비용 또는 `진행 중 · 상한 $1` |
-| `.card.hero.is-*` | `box("결과", tone)`: 첫 줄 `tag` + 제목(`[>>] 진단 중입니다 · 상한 $1`, `[ok] 정상`, `[!!] 진단을 끝내지 못했습니다`), 다음 줄 요약 `.hi`. `max-width: 96ch` |
-| 수정 제안 `.card` + `table.diff` | `box("수정 제안")` + `dl.kv`: `URL` 행 dd 안 두 줄 `<span class="r">- </span>현재값` / `<span class="g">+ </span>제안값`(각 줄 앞 sr-only `현재: `/`제안: `), 같으면 `.dim` `같음`. 게시판도 같은 방식, 여러 줄은 `white-space: pre-line`. `table.diff`와 모바일 `data-label` CSS 삭제 |
+| `.card.hero.is-*` | `box("결과", tone)`: 첫 줄 `tag` + 제목(`[>>] 진단 중입니다 · 상한 $1`, `[ok] 정상`, `[!!] 진단을 끝내지 못했습니다`), 다음 줄 요약 `.hi`. `max-width: 96ch`는 `box`의 키워드 인자 `style=`로 준다(`box`는 나머지 키워드를 `xmlattr`로 붙인다) |
+| 수정 제안 `.card` + `table.diff` | `box("수정 제안")` + `dl.kv`: `URL` 행 dd 안 두 줄 `<span class="r">- </span>현재값` / `<span class="g">+ </span>제안값`(각 줄 앞 sr-only `현재: `/`제안: `), 같으면 현재값 뒤 `.dim` `같음`. 게시판도 같은 방식으로 값마다 한 줄(`<br>`)이고 줄마다 `- `/`+ `가 붙는다. 템플릿 안 `diff(old, new)` 매크로 하나가 두 행을 그린다. `table.diff`와 모바일 `data-label` CSS 삭제 |
 | `.card-foot` 적용 버튼 + `confirm()` | 같은 상자 아래 `[ 이 설정으로 변경 ]` `.btn.rev`, `confirm()` 그대로 |
 | 현재 설정 `.card` | `box("현재 설정")` + `dl.kv`, 제목 뒤 `.dim` `수정 제안 없음`은 상자 첫 줄로 |
 | 근거 `.card` + `ul.list` | `box("근거")` + `ul.list` |
 | 진행 로그(진행 중) `pre#progress.log` + `hx-*` | `box("진행 로그 · 2초마다 새로 고침")` + 같은 `pre`, `hx-*` 속성과 `doctor.py`의 조각 응답은 그대로 |
-| 진행 로그(끝남) `details.card.fold` | `details.box.fold`, summary가 `.bt`(`[+] 진행 로그 · n줄`). 결과가 없으면 `open` 유지 |
+| 진행 로그(끝남) `details.card.fold` | `details.box.fold`, summary가 `.bt`(`[+] 진행 로그 · n줄`). `.bt::before`와 `.fold` 표시가 같은 가상 요소를 쓰므로 `summary.bt::before`가 `╡ [+] `/`╡ [-] `를 함께 그린다. 결과가 없으면 `open` 유지 |
 
 ### 3.7 오류 `error.html`
 
 | 지금 | 바뀐 뒤 |
 |---|---|
-| `.card.error-card` 가운데 정렬 | `box("오류", tone="bad")`, `max-width: 60ch`, 왼쪽 정렬 |
+| `.card.error-card` 가운데 정렬 | `box("오류", tone="bad", style="max-width: 60ch")`, 왼쪽 정렬 |
 | `.error-code` | `.big.r` `404` |
 | `.error-msg` | `.hi` 문단 |
 | `[대시보드로]` primary, `[뒤로]` ghost | `[ 대시보드로 ]` `.btn.rev`, `[ 뒤로 ]` `.btn`(referer 조건 그대로) |
