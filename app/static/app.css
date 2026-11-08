@@ -106,6 +106,7 @@ html:not(.kbd) :is(.keys > span:has(kbd), .it[data-g] .k) { display: none; } /* 
 }
 .bt::before { content: "╡ "; content: "╡ " / ""; }
 .bt::after { content: " ╞"; content: " ╞" / ""; }
+.box > * + * + * { margin-top: 8px; } /* first child is the absolutely placed .bt */
 
 /* buttons: [ label ] */
 .btn {
@@ -242,28 +243,6 @@ details > summary::-webkit-details-marker { display: none; }
 .hero-side .label { color: var(--text-3); font-size: var(--fs-sm); line-height: 18px; }
 .hero-side .value { font-size: var(--fs-md); line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .hero-foot { margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--border); }
-
-/* stat tiles */
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-4); }
-.stat {
-  position: relative; padding: var(--s-4);
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-md); box-shadow: var(--shadow-1);
-}
-.stat dt { color: var(--text-3); font-size: var(--fs-sm); line-height: 18px; }
-.stat dt a { color: inherit; }
-.stat dt a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; } /* whole tile is the link */
-.stat:has(a):hover { border-color: var(--border-strong); }
-.stat:has(a:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
-.stat dt a:focus-visible { outline: none; }
-.stat .value {
-  margin-top: var(--s-1); font-size: var(--fs-stat); line-height: 36px; font-weight: 700;
-  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
-}
-.stat .value small { font-size: var(--fs-base); font-weight: 600; color: var(--text-2); margin-left: 2px; }
-.stat .hint { margin-top: var(--s-1); color: var(--text-3); font-size: var(--fs-sm); line-height: 18px; }
-.stat.is-warn .value { color: var(--warn); }
-.stat.is-bad .value { color: var(--bad); }
 
 /* ---------- table ---------- */
 .table-wrap { overflow-x: auto; position: relative; } /* contains .sr-only in th */
@@ -433,6 +412,14 @@ fieldset.field > legend { padding: 0; margin-bottom: 6px; color: var(--text-2); 
 .error-msg { margin-top: var(--s-2); font-size: var(--fs-md); line-height: 24px; }
 .error-actions { display: flex; justify-content: center; gap: var(--s-2); margin-top: var(--s-6); }
 
+/* ---------- pages ---------- */
+/* dashboard summary: the dt link covers its whole cell */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(18ch, 1fr)); gap: 8px 2ch; }
+.stats > div { position: relative; }
+.stats dt { color: var(--dim); }
+.stats dt a { color: inherit; }
+.stats dt a::after { content: ""; position: absolute; inset: 0; }
+
 /* ---------- utilities ---------- */
 .hi { color: var(--hi); }
 .dim { color: var(--dim); }
@@ -461,8 +448,6 @@ fieldset.field > legend { padding: 0; margin-bottom: 6px; color: var(--text-2); 
   .page-head .actions > form:not(.form-row) > .btn { width: 100%; }
   .hero-main { flex-direction: column; gap: var(--s-3); }
   .hero-side { text-align: left; display: flex; gap: var(--s-2); align-items: baseline; }
-  .stats { grid-template-columns: repeat(2, 1fr); gap: var(--s-3); }
-  .stat .value { font-size: 24px; line-height: 32px; }
   .form-row { flex-direction: column; align-items: stretch; }
   .form-row.keep { flex-direction: row; align-items: center; }
   .form-row > .btn { width: 100%; }
