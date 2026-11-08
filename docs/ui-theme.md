@@ -165,7 +165,7 @@
 | `.page-head` | `.hd`: `h1` 프로그램 · `켜짐 n · 전체 m` · `.dim` `위에 있을수록 먼저 매칭됩니다` |
 | `flash(error, msg)` | `.msg`, 오류는 `[!!]` `.r` |
 | 새 프로그램 `.card` 폼 | `box("새 프로그램", el="form")`: `.fl` 이름(`input.in`, `flex: 1 1 30ch`) · `fieldset` 해상도(`legend.lb`, `.ck` 셋) · `[ + 추가 ]` `.btn.rev`. `.hint` → `.dim` 문단 |
-| 목록 `.card` + `.table` | `box("목록 · m")` + `table.grid`: 순서(`.dim .num`) · 이름(켜짐 `.hi`, 꺼짐 행 `tr.off` 전체 `--dim`, `<strong>` 삭제) · 해상도 · 켜기 · 삭제 |
+| 목록 `.card` + `.table` | `box("목록 · m")` + `table.grid`: 순서(`.dim .num`) · 이름(켜짐 `.hi`, 꺼짐 행 `tr.off` 전체 `--dim`이되 `[ 삭제 ]`는 붉게, `<strong>` 삭제) · 해상도 · 켜기 · 삭제 |
 | 해상도 `details.res-edit` + `.btn-ghost` summary ▾ | `details.edit`의 summary를 `.btn`(`[ 720p · 1080p ]`, sr-only `, 이름 해상도 수정` 유지). 펼치면 `.ck` + `[ 저장 ]` |
 | `.switch` 토글 | `.chk`(`[x] 사용` / `[ ] 사용`), `aria-label` 유지 |
 | `.btn-danger` 삭제 + `confirm()` | `.btn.r` `[ 삭제 ]`, `onsubmit confirm()` 그대로 |

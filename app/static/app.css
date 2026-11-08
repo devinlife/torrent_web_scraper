@@ -89,7 +89,7 @@ html:not(.kbd) :is(.keys > span:has(kbd), .it[data-g] .k) { display: none; } /* 
 .bt::after { content: " ╞"; content: " ╞" / ""; }
 .box.bad { border-color: var(--r); }
 .box.warn { border-color: var(--y); }
-.box.off, .box.off :is(.bt, a, dd, .btn, .chk) { color: var(--dim); } /* not opacity: keeps 4.5:1 */
+.box.off, .box.off :is(.bt, a, dd, .btn:not(.rev, .ya), .chk) { color: var(--dim); } /* not opacity: keeps 4.5:1 */
 .box > * + * + * { margin-top: 8px; } /* first child is the absolutely placed .bt */
 
 /* buttons: [ label ] */
@@ -106,7 +106,6 @@ html:not(.kbd) :is(.keys > span:has(kbd), .it[data-g] .k) { display: none; } /* 
 .btn.rev:hover { background: var(--hi); }
 .btn.rev:focus-visible, .btn.ya:focus-visible { outline-color: var(--bg); outline-offset: -3px; }
 .btn:disabled { background: none; color: var(--dim); cursor: not-allowed; }
-form.inline { display: inline; }
 
 /* switch [x] / [ ] (form-POST button) and checkbox [x] / [ ] (native input, hidden) */
 .chk { padding: 0; border: 0; background: none; color: var(--dim); white-space: nowrap; }
@@ -150,7 +149,7 @@ select.in { appearance: none; -webkit-appearance: none; }
 .grid .num { text-align: right; }
 .grid .end { width: 1%; text-align: right; }
 .grid tr.cur, .grid tbody tr:not(.grp):hover, .grid tbody tr:not(.grp):focus-within { background: var(--raise); }
-.grid tr.off, .grid tr.off :is(a, .btn) { color: var(--dim); }
+.grid tr.off, .grid tr.off :is(a, .btn:not(.r)) { color: var(--dim); }
 .grid .cut { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; }
 .grid .grp th { padding-top: 8px; color: var(--dim); background: linear-gradient(var(--line), var(--line)) 0 19px / 100% 1px no-repeat; }
 .grid .grp th > span { padding-right: 1ch; background: var(--bg); }
